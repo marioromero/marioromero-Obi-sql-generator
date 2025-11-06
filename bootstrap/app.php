@@ -22,46 +22,41 @@ return Application::configure(basePath: dirname(__DIR__))
     // 1. MANEJADOR PARA "RUTA NO ENCONTRADA" (404)
     $exceptions->renderable(function (NotFoundHttpException $e, Request $request) {
 
-        // ¡NUEVO! Logueamos la ruta que falló.
         Log::warning('404 - Ruta no encontrada: ' . $request->path());
 
         return response()->json([
-            'status'  => 404,
-            'message' => 'Ruta no encontrada (El endpoint no existe).',
+            'status'  => false, // <-- CORREGIDO
+            'message' => 'Recurso no encontrado',
             'data'    => null
-        ], 404);
+        ], 404); // <-- Código HTTP real 404
     });
 
     // 2. MANEJADOR PARA ERRORES DE VALIDACIÓN (422)
     $exceptions->renderable(function (ValidationException $e, Request $request) {
 
-        // ¡NUEVO! Logueamos los errores de validación como 'info'.
         Log::info('422 - Error de validación: ', $e->errors());
 
         return response()->json([
-            'status'  => 422,
-            'message' => 'Los datos proporcionados no son válidos.',
+            'status'  => false, // <-- CORREGIDO
+            'message' => 'Los datos proporcionados no son válidos',
             'data'    => $e->errors()
-        ], 422);
+        ], 422); // <-- Código HTTP real 422
     });
 
-    // 3. (OPCIONAL) MANEJADOR GENÉRICO PARA OTROS ERRORES (500)
+    // 3. MANEJADOR GENÉRICO PARA OTROS ERRORES (500)
     $exceptions->renderable(function (\Throwable $e, Request $request) {
 
-        // ¡NUEVO! Este es el log más importante.
-        // Registra el mensaje Y toda la traza de la excepción.
         Log::error($e->getMessage(), ['exception' => $e]);
 
-        // ... (El resto del código de 500 que ya tenías) ...
         $errorMessage = (config('app.env') === 'production')
             ? 'Error interno del servidor.'
-            : $e->getMessage(); // En dev, muestra el mensaje real
+            : $e->getMessage();
 
         return response()->json([
-            'status'  => 500,
+            'status'  => false, // <-- CORREGIDO
             'message' => $errorMessage,
             'data'    => null
-        ], 500);
+        ], 500); // <-- Código HTTP real 500
     });
 
 })->create();

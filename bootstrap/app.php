@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -19,44 +20,48 @@ return Application::configure(basePath: dirname(__DIR__))
 ->withExceptions(function (Exceptions $exceptions) {
 
     // 1. MANEJADOR PARA "RUTA NO ENCONTRADA" (404)
-    // Esto captura el error que estás viendo ahora.
     $exceptions->renderable(function (NotFoundHttpException $e, Request $request) {
+
+        // ¡NUEVO! Logueamos la ruta que falló.
+        Log::warning('404 - Ruta no encontrada: ' . $request->path());
 
         return response()->json([
             'status'  => 404,
-            'message' => 'El recurso solicitado no existe',
+            'message' => 'Ruta no encontrada (El endpoint no existe).',
             'data'    => null
-        ], 404); // Código de estado HTTP 404
+        ], 404);
     });
 
     // 2. MANEJADOR PARA ERRORES DE VALIDACIÓN (422)
-    // Esto capturará automáticamente los fallos de $request->validate()
     $exceptions->renderable(function (ValidationException $e, Request $request) {
+
+        // ¡NUEVO! Logueamos los errores de validación como 'info'.
+        Log::info('422 - Error de validación: ', $e->errors());
 
         return response()->json([
             'status'  => 422,
             'message' => 'Los datos proporcionados no son válidos.',
-            'data'    => $e->errors() // Muestra los campos que fallaron
-        ], 422); // Código de estado HTTP 422
+            'data'    => $e->errors()
+        ], 422);
     });
 
     // 3. (OPCIONAL) MANEJADOR GENÉRICO PARA OTROS ERRORES (500)
-    // Puedes añadir más manejadores, por ejemplo, para errores 500
     $exceptions->renderable(function (\Throwable $e, Request $request) {
 
-        // Para depuración, puedes querer mostrar el error real
-        $errorMessage = $e->getMessage();
+        // ¡NUEVO! Este es el log más importante.
+        // Registra el mensaje Y toda la traza de la excepción.
+        Log::error($e->getMessage(), ['exception' => $e]);
 
-        // PERO en producción, NUNCA expongas los detalles del error.
-        if (config('app.env') === 'production') {
-            $errorMessage = 'Error interno del servidor.';
-        }
+        // ... (El resto del código de 500 que ya tenías) ...
+        $errorMessage = (config('app.env') === 'production')
+            ? 'Error interno del servidor.'
+            : $e->getMessage(); // En dev, muestra el mensaje real
 
         return response()->json([
             'status'  => 500,
             'message' => $errorMessage,
             'data'    => null
-        ], 500); // Código de estado HTTP 500
+        ], 500);
     });
 
 })->create();

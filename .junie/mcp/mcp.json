@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "C:\\php\\php.exe",
+            "args": [
+                "C:\\laragon\\www\\marioromero-Obi-sql-generator\\artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}

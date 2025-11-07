@@ -20,8 +20,15 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'username',
+        'company_name',
         'email',
         'password',
+        'status',
+        'plan_id',
+        'monthly_requests_count',
+        'minute_requests_count',
+        'last_request_at',
     ];
 
     /**
@@ -44,6 +51,13 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'status' => 'string',
+            'last_request_at' => 'datetime',
         ];
+    }
+
+    public function plan()
+    {
+        return $this->belongsTo(Plan::class);
     }
 }

@@ -64,6 +64,24 @@ class AuthController extends Controller
         );
     }
 
+    public function logout(Request $request)
+    {
+        // Obtener el usuario autenticado
+        $user = $request->user();
+
+        // Invalidar el token de acceso actual (el que se usó para esta petición)
+        $user->currentAccessToken()->delete();
+
+        // Registrar en el log
+        Log::info("Logout exitoso para: {$user->username}");
+
+        // Devolver respuesta exitosa
+        return $this->sendResponse(
+            data: null,
+            message: 'Sesión cerrada exitosamente'
+        );
+    }
+
     public function me(Request $request)
     {
         return $this->sendResponse(

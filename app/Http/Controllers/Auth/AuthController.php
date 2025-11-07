@@ -22,8 +22,6 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         // 1. Validar los datos de entrada
-        // Esto NO cambia. Si falla, nuestro handler en app.php (Paso 9)
-        // lo capturará y devolverá el JSON de error 422 (status: false)
         $request->validate([
             'email' => 'required|email',
             'password' => 'required',
@@ -54,6 +52,14 @@ class AuthController extends Controller
             ],
             message: 'Login exitoso',
             httpCode: Response::HTTP_OK // Código HTTP 200
+        );
+    }
+
+    public function me(Request $request)
+    {
+        return $this->sendResponse(
+            data: $request->user(),
+            message: 'Información del usuario obtenida'
         );
     }
 }

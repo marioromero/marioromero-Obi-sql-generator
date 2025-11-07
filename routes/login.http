@@ -8,3 +8,9 @@ Content-Type: application/json
     "password": "admin123"
 }
 ###
+
+### GET request to /api/me (requires authentication)
+GET http://localhost:8000/api/me
+Authorization: Bearer 2|ol31IE8cowBLPGh7kewC8bzDZxSPvOD6nx9gySAP45d9d701
+
+###

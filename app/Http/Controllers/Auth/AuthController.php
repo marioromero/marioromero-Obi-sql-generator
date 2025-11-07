@@ -40,6 +40,15 @@ class AuthController extends Controller
             );
         }
 
+        if ($user->status == 'suspended') {
+            Log::warning("Intento de login de usuario suspendido: {$user->username} ");
+
+            return $this->sendError(
+                'Esta cuenta se encuentra suspendida.',
+                Response::HTTP_FORBIDDEN // 403 Forbidden
+            );
+        }
+
         // 4. Si las credenciales son correctas, creamos el token
         $token = $user->createToken('auth_token')->plainTextToken;
 

@@ -1,0 +1,94 @@
+###
+
+### LOGIN - Obtener token de autenticación
+POST http://localhost:8000/api/login
+Content-Type: application/json
+
+{
+    "username": "admin",
+    "password": "admin123"
+}
+
+###
+
+### GET /api/me - Obtener información del usuario autenticado
+GET http://localhost:8000/api/me
+Authorization: Bearer {{access_token}}
+
+###
+
+### SCHEMAS CRUD - Gestión de Esquemas (Carpetas)
+
+### GET /api/schemas - Listar todos los esquemas del usuario
+GET http://localhost:8000/api/schemas
+Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
+
+### POST /api/schemas - Crear un nuevo esquema
+POST http://localhost:8000/api/schemas
+Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
+Content-Type: application/json
+
+{
+    "name": "Mi Primer Esquema",
+    "dialect": "mysql"
+}
+
+### GET /api/schemas/{id} - Obtener un esquema específico
+GET http://localhost:8000/api/schemas/1
+Authorization: Bearer {{access_token}}
+
+### PUT /api/schemas/{id} - Actualizar un esquema
+PUT http://localhost:8000/api/schemas/1
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "name": "Esquema Actualizado",
+    "dialect": "mysql"
+}
+
+### DELETE /api/schemas/{id} - Eliminar un esquema
+DELETE http://localhost:8000/api/schemas/1
+Authorization: Bearer {{access_token}}
+
+###
+
+### SCHEMA TABLES CRUD - Gestión de Tablas de Esquema (Archivos)
+
+### POST /api/schema-tables - Crear una nueva tabla en un esquema
+POST http://localhost:8000/api/schema-tables
+Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
+Content-Type: application/json
+
+{
+  "schema_id": 1,
+  "table_name": "orders",
+  "definition": "CREATE TABLE orders (\n  order_id INT PRIMARY KEY AUTO_INCREMENT,\n  user_id INT,\n  total_amount DECIMAL(10, 2),\n  order_status VARCHAR(50) DEFAULT 'pending',\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  FOREIGN KEY (user_id) REFERENCES users(id)\n);"
+}
+
+### GET /api/schema-tables/{id} - Obtener una tabla específica
+GET http://localhost:8000/api/schema-tables/1
+Authorization: Bearer {{access_token}}
+
+### PUT /api/schema-tables/{id} - Actualizar una tabla
+PUT http://localhost:8000/api/schema-tables/1
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "schema_id": 1,
+    "table_name": "users_updated",
+    "definition": "CREATE TABLE users (\n  id INT PRIMARY KEY AUTO_INCREMENT,\n  name VARCHAR(255) NOT NULL,\n  email VARCHAR(255) UNIQUE NOT NULL,\n  status ENUM('active', 'inactive') DEFAULT 'active',\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP\n);"
+}
+
+### DELETE /api/schema-tables/{id} - Eliminar una tabla
+DELETE http://localhost:8000/api/schema-tables/1
+Authorization: Bearer {{access_token}}
+
+###
+
+### LOGOUT - Cerrar sesión
+POST http://localhost:8000/api/logout
+Authorization: Bearer {{access_token}}
+
+###

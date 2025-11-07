@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'together' => [
+        'api_key' => env('TOGETHER_API_KEY'),
+        'api_base_url' => env('TOGETHER_API_BASE_URL', 'https://api.together.xyz/v1/'),
+        'model' => env('TOGETHER_MODEL', 'defog/sqlcoder-70b-aq'), // Modelo especialista
+    ],
+
 ];

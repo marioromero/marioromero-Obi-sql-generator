@@ -18,23 +18,26 @@ class DatabaseSeeder extends Seeder
         // Crear planes primero
         $sandboxPlan = \App\Models\Plan::create([
             'name' => 'sandbox',
-            'monthly_request_limit' => 100,
+            'slug' => 'sandbox',
+            'monthly_requests_limit' => 100,
             'rate_limit_per_minute' => 10,
-            'is_active' => true,
+            'price' => 0.00,
         ]);
 
         $basicPlan = \App\Models\Plan::create([
             'name' => 'basic',
-            'monthly_request_limit' => 1000,
+            'slug' => 'basic',
+            'monthly_requests_limit' => 1000,
             'rate_limit_per_minute' => 60,
-            'is_active' => true,
+            'price' => 9.99,
         ]);
 
         $proPlan = \App\Models\Plan::create([
             'name' => 'pro',
-            'monthly_request_limit' => 10000,
+            'slug' => 'pro',
+            'monthly_requests_limit' => 10000,
             'rate_limit_per_minute' => 120,
-            'is_active' => true,
+            'price' => 29.99,
         ]);
 
         // Usuario de prueba

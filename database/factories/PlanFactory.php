@@ -18,9 +18,10 @@ class PlanFactory extends Factory
     {
         return [
             'name' => $this->faker->unique()->randomElement(['sandbox', 'basic', 'pro']),
-            'monthly_request_limit' => $this->faker->numberBetween(100, 10000),
+            'slug' => $this->faker->unique()->slug(),
+            'monthly_requests_limit' => $this->faker->numberBetween(100, 10000),
             'rate_limit_per_minute' => $this->faker->numberBetween(10, 120),
-            'is_active' => $this->faker->boolean(90), // 90% chance of being active
+            'price' => $this->faker->randomFloat(2, 0, 100),
         ];
     }
 }

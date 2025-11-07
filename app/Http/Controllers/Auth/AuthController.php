@@ -23,17 +23,17 @@ class AuthController extends Controller
     {
         // 1. Validar los datos de entrada
         $request->validate([
-            'email' => 'required|email',
+            'username' => 'required|string',
             'password' => 'required',
         ]);
 
-        // 2. Buscar al usuario por su email
-        $user = User::where('email', $request->email)->first();
+        // 2. Buscar al usuario por su username
+        $user = User::where('username', $request->username)->first();
 
         // 3. Verificar al usuario y la contraseña
         if (! $user || ! Hash::check($request->password, $user->password)) {
 
-            Log::info("Intento de login fallido para el email: {$request->email}");
+            Log::info("Intento de login fallido para el username: {$request->username}");
             return $this->sendError(
                 'Las credenciales proporcionadas son incorrectas.',
                 Response::HTTP_UNAUTHORIZED // Código HTTP 401

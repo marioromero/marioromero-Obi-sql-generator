@@ -6,15 +6,27 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 test('login exitoso con credenciales correctas', function () {
+    // Crear un plan primero
+    $plan = \App\Models\Plan::factory()->create([
+        'name' => 'basic',
+        'monthly_request_limit' => 1000,
+        'rate_limit_per_minute' => 60,
+        'is_active' => true,
+    ]);
+
     // Crear un usuario de prueba
     $user = User::factory()->create([
+        'username' => 'testuser',
         'email' => 'test@example.com',
         'password' => bcrypt('password123'),
+        'company_name' => 'Test Company',
+        'status' => 'active',
+        'plan_id' => $plan->id,
     ]);
 
     // Hacer petición POST a /api/login con credenciales correctas
     $response = $this->postJson('/api/login', [
-        'email' => 'test@example.com',
+        'username' => 'testuser',
         'password' => 'password123',
     ]);
 
@@ -36,15 +48,27 @@ test('login exitoso con credenciales correctas', function () {
 });
 
 test('login fallido con credenciales incorrectas', function () {
+    // Crear un plan primero
+    $plan = \App\Models\Plan::factory()->create([
+        'name' => 'basic',
+        'monthly_request_limit' => 1000,
+        'rate_limit_per_minute' => 60,
+        'is_active' => true,
+    ]);
+
     // Crear un usuario de prueba
     User::factory()->create([
+        'username' => 'testuser',
         'email' => 'test@example.com',
         'password' => bcrypt('password123'),
+        'company_name' => 'Test Company',
+        'status' => 'active',
+        'plan_id' => $plan->id,
     ]);
 
     // Hacer petición POST a /api/login con contraseña incorrecta
     $response = $this->postJson('/api/login', [
-        'email' => 'test@example.com',
+        'username' => 'testuser',
         'password' => 'wrongpassword',
     ]);
 
@@ -56,10 +80,10 @@ test('login fallido con credenciales incorrectas', function () {
              ]);
 });
 
-test('login fallido con email no existente', function () {
-    // Hacer petición POST a /api/login con email no existente
+test('login fallido con username no existente', function () {
+    // Hacer petición POST a /api/login con username no existente
     $response = $this->postJson('/api/login', [
-        'email' => 'nonexistent@example.com',
+        'username' => 'nonexistentuser',
         'password' => 'password123',
     ]);
 
@@ -71,8 +95,8 @@ test('login fallido con email no existente', function () {
              ]);
 });
 
-test('validación falla sin email', function () {
-    // Hacer petición POST a /api/login sin email
+test('validación falla sin username', function () {
+    // Hacer petición POST a /api/login sin username
     $response = $this->postJson('/api/login', [
         'password' => 'password123',
     ]);
@@ -87,7 +111,7 @@ test('validación falla sin email', function () {
 test('validación falla sin password', function () {
     // Hacer petición POST a /api/login sin password
     $response = $this->postJson('/api/login', [
-        'email' => 'test@example.com',
+        'username' => 'testuser',
     ]);
 
     // Verificar respuesta 422 (validación falla)

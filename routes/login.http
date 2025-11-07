@@ -4,13 +4,13 @@ POST http://localhost:8000/api/login
 Content-Type: application/json
 
 {
-    "email": "admin@mail.com",
+    "username": "admin",
     "password": "admin123"
 }
 ###
 
 ### GET request to /api/me (requires authentication)
 GET http://localhost:8000/api/me
-Authorization: Bearer 2|ol31IE8cowBLPGh7kewC8bzDZxSPvOD6nx9gySAP45d9d701
+Authorization: Bearer 1|jubtOAp3sW4pdjl5TlioVL24rRC6rxy2Z4CKqxP9cc9a91d
 
 ###

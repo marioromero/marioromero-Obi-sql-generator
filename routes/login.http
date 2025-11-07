@@ -1,0 +1,10 @@
+###
+### POST request to login API
+POST http://localhost:8000/api/login
+Content-Type: application/json
+
+{
+    "email": "admin@mail.com",
+    "password": "admin123"
+}
+###

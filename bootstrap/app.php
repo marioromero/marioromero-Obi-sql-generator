@@ -1,3 +1,5 @@
+
+
 <?php
 
 use Illuminate\Foundation\Application;
@@ -7,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Illuminate\Auth\AuthenticationException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,48 +18,71 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+
+        // CLAVE: Registrar nuestro middleware personalizado
+        $middleware->alias([
+            'auth' => \App\Http\Middleware\Authenticate::class,
+            'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        ]);
+
     })
-->withExceptions(function (Exceptions $exceptions) {
+    ->withExceptions(function (Exceptions $exceptions) {
 
-    // 1. MANEJADOR PARA "RUTA NO ENCONTRADA" (404)
-    $exceptions->renderable(function (NotFoundHttpException $e, Request $request) {
+        // Forzar JSON en todas las rutas API
+        $exceptions->shouldRenderJsonWhen(function (Request $request) {
+            return $request->is('api/*');
+        });
 
-        Log::warning('404 - Ruta no encontrada: ' . $request->path());
+        // Manejador específico para 401
+        $exceptions->renderable(function (AuthenticationException $e, Request $request) {
 
-        return response()->json([
-            'status'  => false, // <-- CORREGIDO
-            'message' => 'Recurso no encontrado',
-            'data'    => null
-        ], 404); // <-- Código HTTP real 404
-    });
+            Log::warning('401 - Intento de acceso no autenticado: ' . $request->path());
 
-    // 2. MANEJADOR PARA ERRORES DE VALIDACIÓN (422)
-    $exceptions->renderable(function (ValidationException $e, Request $request) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'No autenticado. El token es inválido o no se proporcionó.',
+                'data'    => null
+            ], 401);
+        });
 
-        Log::info('422 - Error de validación: ', $e->errors());
+        // Manejador 404
+        $exceptions->renderable(function (NotFoundHttpException $e, Request $request) {
 
-        return response()->json([
-            'status'  => false, // <-- CORREGIDO
-            'message' => 'Los datos proporcionados no son válidos',
-            'data'    => $e->errors()
-        ], 422); // <-- Código HTTP real 422
-    });
+            Log::warning('404 - Ruta no encontrada: ' . $request->path());
 
-    // 3. MANEJADOR GENÉRICO PARA OTROS ERRORES (500)
-    $exceptions->renderable(function (\Throwable $e, Request $request) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Recurso no encontrado',
+                'data'    => null
+            ], 404);
+        });
 
-        Log::error($e->getMessage(), ['exception' => $e]);
+        // Manejador 422
+        $exceptions->renderable(function (ValidationException $e, Request $request) {
 
-        $errorMessage = (config('app.env') === 'production')
-            ? 'Error interno del servidor.'
-            : $e->getMessage();
+            Log::info('422 - Error de validación: ', $e->errors());
 
-        return response()->json([
-            'status'  => false, // <-- CORREGIDO
-            'message' => $errorMessage,
-            'data'    => null
-        ], 500); // <-- Código HTTP real 500
-    });
+            return response()->json([
+                'status'  => false,
+                'message' => 'Los datos proporcionados no son válidos',
+                'data'    => $e->errors()
+            ], 422);
+        });
 
-})->create();
+        // Manejador 500
+        $exceptions->renderable(function (\Throwable $e, Request $request) {
+
+            Log::error($e->getMessage(), ['exception' => $e]);
+
+            $errorMessage = (config('app.env') === 'production')
+                ? 'Error interno del servidor.'
+                : $e->getMessage();
+
+            return response()->json([
+                'status'  => false,
+                'message' => $errorMessage,
+                'data'    => null
+            ], 500);
+        });
+
+    })->create();

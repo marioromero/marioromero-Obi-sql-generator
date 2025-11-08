@@ -87,6 +87,31 @@ Authorization: Bearer {{access_token}}
 
 ###
 
+### TRANSLATE - Traducir consulta natural a SQL
+POST http://localhost:8000/api/translate
+Authorization: Bearer 1|DX7Dt8UDXnbSrfk8lSUpw04Pe50KvNUlcjfqjmEqb5ef9e35
+Content-Type: application/json
+
+{
+  "schema_id": 1,
+  "question": "ola nesecito un informe pa la reunion. dame un resumen de los casos k entraron este año 2025 (osea created_at despues del 2025-01-01). pero solo los k no estan cerrados (el overall_status tiene k ser 'en proceso'). que lo muestre segun el id banco, cuantos casos tiene (un conteo), la suma de toda la plata k se aprobo (approved_amount) y la suma de lo k se a pagado (amount_paid). a y tambien ponme la resta de lo aprobado menos lo pagado pa ver la deuda. solo muestrame los k tienen mas de 2 casos pendientes. ordenalos del k tiene mas plata por pagar (la resta esa k te dije) al k tiene menos."
+}
+
+###
+
+### TRANSLATE - Traducir consulta natural a SQL
+POST http://localhost:8000/api/translate
+Authorization: Bearer 1|DX7Dt8UDXnbSrfk8lSUpw04Pe50KvNUlcjfqjmEqb5ef9e35
+Content-Type: application/json
+
+{
+  "schema_id": 1,
+  "question": "trae todos los registros de casos, que sea mayor su id de 1200"
+}
+
+###
+
+
 ### LOGOUT - Cerrar sesión
 POST http://localhost:8000/api/logout
 Authorization: Bearer {{access_token}}

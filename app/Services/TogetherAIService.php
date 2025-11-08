@@ -27,8 +27,9 @@ class TogetherAIService
             throw new Exception('La API Key de Together.ai no está configurada.');
         }
 
-        $this->client = Http::withToken($this->apiKey)
-            ->timeout(60) // 60 segundos de timeout
+        $this->client = Http::withoutVerifying() // <-- ¡AÑADE ESTA LÍNEA!
+        ->withToken($this->apiKey)
+            ->timeout(60)
             ->baseUrl($this->baseUrl);
     }
 
@@ -41,7 +42,7 @@ class TogetherAIService
      * @return string El string SQL crudo o un JSON de error de la IA.
      * @throws \Exception Si la API de Together.ai falla.
      */
-    public function generateSql(string $userQuestion, string $dialect, array $schemaTables): string
+    public function generateSql(string $userQuestion, string $dialect, array $schemaTables): array
     {
         $systemPrompt = $this->buildSystemPrompt($dialect, $schemaTables);
 
@@ -52,24 +53,35 @@ class TogetherAIService
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user', 'content' => $userQuestion],
                 ],
-                'temperature' => 0.0, // Punto 3 del resumen: Control de "Alucinaciones"
+                'temperature' => 0.0,
                 'max_tokens' => 1024,
-                'response_format' => ['type' => 'text'], // Forzar respuesta de texto
+                'response_format' => ['type' => 'text'],
             ]);
 
-            // Lanza una excepción si la API devuelve 4xx o 5xx
             $response->throw();
 
-            // Extraer el contenido de la respuesta
-            $aiResponse = $response->json('choices.0.message.content');
+            // --- LÓGICA DE EXTRACCIÓN MODIFICADA ---
+            $data = $response->json(); // Obtener la respuesta JSON completa
 
+            // Extraer el contenido
+            $aiResponse = $data['choices'][0]['message']['content'] ?? null;
             if (empty($aiResponse)) {
                 throw new Exception('La respuesta de la IA estaba vacía.');
             }
 
-            // Devolver el string crudo. El controlador se encargará de
-            // revisar si es SQL o un JSON de error de ambigüedad.
-            return $aiResponse;
+            // Extraer el uso de tokens
+            $usage = $data['usage'] ?? [
+                'prompt_tokens' => 0,
+                'completion_tokens' => 0,
+                'total_tokens' => 0,
+            ];
+
+            // Devolver ambos
+            return [
+                'sql_or_error' => $aiResponse,
+                'usage' => $usage,
+            ];
+            // --- FIN DE LA MODIFICACIÓN ---
 
         } catch (RequestException $e) {
             Log::error('Error en la API de Together.ai: ' . $e->getMessage(), [
@@ -79,7 +91,7 @@ class TogetherAIService
             throw new Exception('El servicio de traducción no está disponible: ' . $e->getMessage());
         } catch (Exception $e) {
             Log::error('Error en TogetherAIService: ' . $e->getMessage());
-            throw $e; // Re-lanzar la excepción
+            throw $e;
         }
     }
 
@@ -89,6 +101,7 @@ class TogetherAIService
     private function buildSystemPrompt(string $dialect, array $schemaTables): string
     {
         $schemaString = implode("\n\n", $schemaTables);
+        //dd($schemaString);
 
         // Este prompt instruye a la IA sobre todas nuestras reglas de negocio.
         return <<<PROMPT
@@ -100,8 +113,6 @@ Tu única tarea es generar una consulta SQL precisa y optimizada.
 2.  **Dialecto:** Genera la consulta usando sintaxis de: {$dialect}.
 3.  **Precisión:** No inventes nombres de columnas o tablas que no estén en el esquema.
 4.  **Respuesta:** Responde SOLAMENTE con el código SQL. No añadas explicaciones, saludos, ni markdown (```sql).
-5.  **Ambigüedad (Punto 3 del resumen):** Si la pregunta del usuario es ambigua, vaga o no se puede responder con el esquema proporcionado (ej. "dame las ventas" pero "ventas" no está definido), NO generes SQL. En su lugar, responde con un objeto JSON de error, y NADA MÁS, con el formato:
-    {"error": true, "message": "Tu pregunta es ambigua. Por favor, sé más específico."}
 
 ### ESQUEMA DE BASE DE DATOS
 {$schemaString}

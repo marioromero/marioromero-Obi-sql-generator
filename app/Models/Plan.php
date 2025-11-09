@@ -13,6 +13,7 @@ class Plan extends Model
     protected $fillable = [
         'name',
         'monthly_request_limit',
+        'monthly_token_limit',
         'rate_limit_per_minute',
         'is_active',
     ];

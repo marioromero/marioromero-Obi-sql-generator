@@ -18,6 +18,7 @@ return new class extends Migration
             $table->integer('monthly_requests_limit');
             $table->integer('rate_limit_per_minute');
             $table->decimal('price', 8, 2);
+            $table->unsignedBigInteger('monthly_token_limit')->default(0);
             $table->timestamps();
         });
     }

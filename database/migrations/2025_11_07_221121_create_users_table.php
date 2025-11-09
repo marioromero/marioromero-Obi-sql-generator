@@ -22,6 +22,7 @@ return new class extends Migration
             $table->enum('status', ['active', 'suspended', 'trial'])->default('trial');
             $table->foreignId('plan_id')->constrained('plans')->cascadeOnDelete();
             $table->integer('monthly_requests_count')->default(0);
+            $table->unsignedBigInteger('monthly_token_count')->default(0);
             $table->integer('minute_requests_count')->default(0);
             $table->timestamp('last_request_at')->nullable();
             $table->rememberToken();

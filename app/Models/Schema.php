@@ -15,6 +15,7 @@ class Schema extends Model
         'user_id',
         'name',
         'dialect',
+        'database_name_prefix',
     ];
 
     public function user(): BelongsTo

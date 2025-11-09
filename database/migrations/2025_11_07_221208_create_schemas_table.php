@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('name');
             $table->string('dialect');
+            $table->string('database_name_prefix')->nullable();
             $table->timestamps();
         });
     }

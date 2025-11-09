@@ -73,12 +73,27 @@ class DatabaseSeeder extends Seeder
             'plan_id' => $proPlan->id,
         ]);
 
+        // Crear token de acceso para el usuario admin (user_id = 2)
+        \DB::table('personal_access_tokens')->insert([
+            'id' => 1,
+            'tokenable_type' => 'App\\Models\\User',
+            'tokenable_id' => 2,
+            'name' => 'auth_token',
+            'token' => '6b9b18388e1489ae92e204f3e1da0b7f50577aeb05a9f3546f3c31ef00c9e4b3',
+            'abilities' => '["*"]',
+            'last_used_at' => '2025-11-09 00:12:30',
+            'expires_at' => null,
+            'created_at' => '2025-11-08 23:59:29',
+            'updated_at' => '2025-11-09 00:12:30',
+        ]);
+
         // Crear esquema de ejemplo para el usuario admin
         $adminUser = User::where('username', 'admin')->first();
         $schema = \App\Models\Schema::create([
             'user_id' => $adminUser->id,
             'name' => 'Traro Obi Cases',
             'dialect' => 'mariadb',
+            'database_name_prefix' => 'traro_obi',
         ]);
 
         // Crear tabla de casos en el esquema

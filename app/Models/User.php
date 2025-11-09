@@ -66,4 +66,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(Schema::class);
     }
+
+    public function promptHistories(): HasMany
+    {
+        return $this->hasMany(PromptHistory::class);
+    }
 }

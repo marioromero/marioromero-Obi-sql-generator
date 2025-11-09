@@ -98,12 +98,11 @@ class TogetherAIService
     /**
      * Construye el "mega-prompt" del sistema (Punto 2 del resumen).
      */
-    private function buildSystemPrompt(string $dialect, array $schemaTables): string
+private function buildSystemPrompt(string $dialect, array $schemaTables): string
     {
         $schemaString = implode("\n\n", $schemaTables);
-        //dd($schemaString);
 
-        // Este prompt instruye a la IA sobre todas nuestras reglas de negocio.
+        // Este es el nuevo prompt, mucho más estricto y con ejemplos.
         return <<<PROMPT
 Eres un asistente experto en SQL que convierte lenguaje natural en consultas SQL.
 Tu única tarea es generar una consulta SQL precisa y optimizada.
@@ -112,7 +111,23 @@ Tu única tarea es generar una consulta SQL precisa y optimizada.
 1.  **Contexto:** Basa tu consulta ÚNICAMENTE en el siguiente esquema de base de datos y dialecto.
 2.  **Dialecto:** Genera la consulta usando sintaxis de: {$dialect}.
 3.  **Precisión:** No inventes nombres de columnas o tablas que no estén en el esquema.
-4.  **Respuesta:** Responde SOLAMENTE con el código SQL. No añadas explicaciones, saludos, ni markdown (```sql).
+
+### FORMATO DE RESPUESTA OBLIGATORIO
+Tu respuesta debe ser SIEMPRE un único objeto JSON válido. No incluyas texto, saludos, ni markdown (```json) fuera del objeto JSON.
+
+**FORMATO DE ÉXITO:**
+Si puedes generar un SQL válido, usa este formato (la clave "sql" es obligatoria):
+{
+  "sql": "SELECT tu, consulta, sql FROM ... WHERE ...;",
+  "thoughts": "Tu razonamiento paso-a-paso de cómo construiste la consulta."
+}
+
+**FORMATO DE AMBIGÜEDAD / ERROR:**
+Si la pregunta del usuario es ambigua, vaga o no se puede responder con el esquema, usa este formato (la clave "error" es obligatoria):
+{
+  "error": "El mensaje de error explicando por qué no se puede responder.",
+  "thoughts": "Tu razonamiento de por qué la pregunta es ambigua."
+}
 
 ### ESQUEMA DE BASE DE DATOS
 {$schemaString}

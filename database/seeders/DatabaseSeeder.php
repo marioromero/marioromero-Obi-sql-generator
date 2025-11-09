@@ -141,5 +141,36 @@ class DatabaseSeeder extends Seeder
   CONSTRAINT `cases_agreement_id_foreign` FOREIGN KEY (`agreement_id`) REFERENCES `agreements` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=24623 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ]);
+
+        // Crear tabla de customers en el mismo esquema
+        \App\Models\SchemaTable::create([
+            'schema_id' => $schema->id,
+            'table_name' => 'customers',
+            'definition' => "CREATE TABLE `customers` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `lastname` varchar(100) DEFAULT NULL,
+  `full_name` varchar(100) DEFAULT NULL,
+  `dni` varchar(20) DEFAULT NULL,
+  `username` varchar(50) DEFAULT NULL,
+  `password` varchar(255) DEFAULT NULL,
+  `serial_number` varchar(15) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `address` varchar(255) DEFAULT NULL,
+  `phone` varchar(15) DEFAULT NULL,
+  `phone2` varchar(15) DEFAULT NULL,
+  `gender` char(1) DEFAULT NULL,
+  `marital_status` varchar(50) DEFAULT NULL,
+  `occupation` varchar(100) DEFAULT NULL,
+  `nationality` varchar(50) DEFAULT NULL,
+  `is_enabled` tinyint(1) DEFAULT 1,
+  `tags` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`tags`)),
+  `commune_id` bigint(20) unsigned DEFAULT NULL,
+  `assigned_agent` bigint(20) unsigned DEFAULT NULL,
+  `comments` longtext DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `customers_dni_unique` (`dni`)
+) ENGINE=InnoDB AUTO_INCREMENT=8982 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ]);
     }
 }

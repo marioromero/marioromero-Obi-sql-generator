@@ -101,12 +101,14 @@ Content-Type: application/json
 
 ### TRANSLATE - Traducir consulta natural a SQL
 POST http://localhost:8000/api/translate
-Authorization: Bearer 1|DX7Dt8UDXnbSrfk8lSUpw04Pe50KvNUlcjfqjmEqb5ef9e35
+Authorization: Bearer 1|cet1oWyPLAZJqLEHa7RAXx6uzjh4GwJJ4aI4iNsa718b68a0
 Content-Type: application/json
 
 {
-  "schema_id": 1,
-  "question": "trae todos los registros de casos, que sea mayor su id de 1200"
+  "question": "Tráeme todos los casos cuyo id sea mayor a 12000 pero en vez del id, el nombre del cliente y su correo electrónico",
+  "schema_table_ids": [
+    1,2
+  ]
 }
 
 ###

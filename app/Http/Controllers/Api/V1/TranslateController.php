@@ -22,9 +22,10 @@ class TranslateController extends Controller
     use ApiResponser;
 
     public function __construct(
-        protected TogetherAIService $togetherAIService,
+        protected TogetherAIService    $togetherAIService,
         protected SQLValidationService $sqlValidationService
-    ) {
+    )
+    {
     }
 
     /**
@@ -83,8 +84,15 @@ class TranslateController extends Controller
             $dialect = $schema->dialect;
             $schemaDefinitions = $tablesToLoad->pluck('definition')->all();
 
-            // 5. Llamar al "Traductor" (El evento facturable)
-            $serviceResponse = $this->togetherAIService->generateSql($userQuestion, $dialect, $schemaDefinitions);
+            $dbPrefix = $schema->database_name_prefix;
+
+            // 5. Llamar al "Traductor" (pasando el nuevo prefijo)
+            $serviceResponse = $this->togetherAIService->generateSql(
+                $userQuestion,
+                $dialect,
+                $schemaDefinitions,
+                $dbPrefix // <-- ¡NUEVO PARÁMETRO!
+            );
             $aiResponseString = $serviceResponse['sql_or_error'];
             $usageData = $serviceResponse['usage'];
 

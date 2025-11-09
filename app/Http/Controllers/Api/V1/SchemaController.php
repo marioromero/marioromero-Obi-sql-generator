@@ -29,6 +29,7 @@ class SchemaController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'dialect' => 'required|string|max:50', // 'mysql', 'postgres', etc.
+            'database_name_prefix' => 'nullable|string|max:100',
         ]);
 
         $schema = $request->user()->schemas()->create($validated);
@@ -62,6 +63,7 @@ class SchemaController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'dialect' => 'sometimes|required|string|max:50',
+            'database_name_prefix' => 'sometimes|nullable|string|max:100',
         ]);
 
         $schema->update($validated);

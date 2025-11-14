@@ -13,7 +13,12 @@ class SchemaTable extends Model
     protected $fillable = [
         'schema_id',
         'table_name',
+        'column_metadata',
         'definition',
+    ];
+
+    protected $casts = [
+        'column_metadata' => 'array', // <-- AÑADIR (Laravel lo convierte auto. en Array)
     ];
 
     public function schema(): BelongsTo

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('schema_id')->constrained('schemas')->cascadeOnDelete();
             $table->string('table_name');
+            $table->json('column_metadata')->nullable();
             $table->longText('definition');
             $table->timestamps();
         });

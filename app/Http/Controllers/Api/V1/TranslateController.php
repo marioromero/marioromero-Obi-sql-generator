@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 use Exception;
 
 class TranslateController extends Controller
@@ -22,31 +23,32 @@ class TranslateController extends Controller
     use ApiResponser;
 
     public function __construct(
-        protected TogetherAIService    $togetherAIService,
+        protected TogetherAIService $togetherAIService,
         protected SQLValidationService $sqlValidationService
-    )
-    {
+    ) {
     }
 
-    /**
-     * El endpoint principal de Text-to-SQL.
-     */
     public function translate(Request $request)
     {
-        // 1. Validar la petición
+        // 1. Validar la petición (Nuevo DTO)
         $validated = $request->validate([
             'question' => 'required|string|max:1000',
-            'schema_id' => 'sometimes|integer|exists:schemas,id',
-            'schema_table_ids' => 'required_without:schema_id|array|min:1',
+            'conversation_id' => 'nullable|string|max:255',
+            'schema_table_ids' => 'required|array|min:1', // Ahora las tablas son siempre requeridas
             'schema_table_ids.*' => 'integer|exists:schema_tables,id',
+            'schema_config' => 'nullable|array', // El DTO de optimización
+            'schema_config.*.table_id' => 'required|integer|exists:schema_tables,id',
+            'schema_config.*.use_full_schema' => 'required|boolean',
+            'schema_config.*.include_columns' => 'sometimes|array',
+            'schema_config.*.include_columns.*' => 'string',
         ]);
 
         $user = $request->user();
         $userQuestion = $validated['question'];
+        $conversationId = $validated['conversation_id'] ?? (string) Str::uuid(); // Siempre generamos/usamos uno
+        $tableIds = $validated['schema_table_ids'];
 
-        // --- Variables de auditoría (definidas en el scope principal) ---
-        $schemaDefinitions = [];
-        $dialect = '';
+        // --- Variables de auditoría ---
         $sqlQuery = null;
         $aiResponseString = '';
         $usageData = [];
@@ -54,44 +56,60 @@ class TranslateController extends Controller
         $errorMessage = null;
 
         try {
-            // 2. Lógica de Carga Dinámica de Tablas y Autorización
-            $tablesToLoad = collect();
-            $schema = null;
+            // 2. Cargar Tablas Base y Autorizar
+            $tablesToLoad = SchemaTable::with('schema')->whereIn('id', $tableIds)->get();
+            $schema = $tablesToLoad->first()->schema; // Asumir que todas son del mismo schema
 
-            if (isset($validated['schema_table_ids'])) {
-                $tableIds = $validated['schema_table_ids'];
-                $tablesToLoad = SchemaTable::with('schema')->whereIn('id', $tableIds)->get();
-
-                foreach ($tablesToLoad as $table) {
-                    if ($table->schema->user_id !== $user->id) {
-                        throw new Exception('Acceso no autorizado a una o más tablas del esquema.', Response::HTTP_FORBIDDEN);
-                    }
-                }
-                $schema = $tablesToLoad->first()->schema;
-            } else {
-                $schema = Schema::with('schemaTables')->find($validated['schema_id']);
-                if ($user->id !== $schema->user_id) {
-                    throw new Exception('No autorizado para usar este esquema.', Response::HTTP_FORBIDDEN);
-                }
-                $tablesToLoad = $schema->schemaTables;
+            // Autorización
+            if ($user->id !== $schema->user_id) {
+                throw new Exception('No autorizado para usar este esquema.', Response::HTTP_FORBIDDEN);
             }
-
             if ($tablesToLoad->isEmpty()) {
-                throw new Exception('No se especificaron tablas o el esquema está vacío.', Response::HTTP_BAD_REQUEST);
+                throw new Exception('No se especificaron tablas.', Response::HTTP_BAD_REQUEST);
             }
+
+            // 3. APLICAR FILTRADO DE COLUMNAS (OPTIMIZACIÓN INTELIGENTE)
+            $schemaConfig = $request->input('schema_config', []);
+            $configMap = collect($schemaConfig)->keyBy('table_id');
+
+            $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
+                $config = $configMap->get($table->id);
+
+                // A. Si no hay config para esta tabla, o 'use_full_schema' es true, mandamos todo.
+                if (!$config || ($config['use_full_schema'] ?? true)) {
+                    return $table;
+                }
+
+                // B. Si 'use_full_schema' es false, filtramos.
+                $requestedColumns = $config['include_columns'] ?? [];
+
+                // --- FUSIÓN INTELIGENTE ---
+                $filteredMetadata = collect($table->column_metadata)
+                    ->filter(function ($meta) use ($requestedColumns) {
+                        $colName = $meta['col'];
+                        $isDefault = $meta['is_default'] ?? false;
+                        return in_array($colName, $requestedColumns) || $isDefault;
+                    })
+                    ->values()
+                    ->all();
+
+                $table->column_metadata = $filteredMetadata;
+                return $table;
+            });
 
             // 4. Preparar datos para la IA
             $dialect = $schema->dialect;
-            $schemaDefinitions = $tablesToLoad->pluck('definition')->all();
-
             $dbPrefix = $schema->database_name_prefix;
+            $schemaTablesObjects = $filteredTables->all(); // Usamos las tablas filtradas
 
-            // 5. Llamar al "Traductor" (pasando el nuevo prefijo)
+            // 5. Llamar al "Traductor"
             $serviceResponse = $this->togetherAIService->generateSql(
                 $userQuestion,
                 $dialect,
-                $schemaDefinitions,
-                $dbPrefix // <-- ¡NUEVO PARÁMETRO!
+                $schemaTablesObjects,
+                $dbPrefix,
+                $user,
+                $conversationId
             );
             $aiResponseString = $serviceResponse['sql_or_error'];
             $usageData = $serviceResponse['usage'];
@@ -99,99 +117,105 @@ class TranslateController extends Controller
             Log::debug('Respuesta CRUDA de la IA:', ['response' => $aiResponseString]);
             Log::info('Uso de tokens:', $usageData);
 
-            // --- ¡NUEVO! PASO 6: COBRO DE TOKENS INMEDIATO ---
-            // Le cobramos al usuario por la llamada a la IA, sin importar si
-            // la respuesta es válida o no.
+            // 6. Cobro de Tokens Inmediato
             try {
                 DB::transaction(function () use ($user, $usageData) {
                     $user->increment('monthly_requests_count');
                     $user->increment('monthly_token_count', $usageData['total_tokens'] ?? 0);
                 });
             } catch (Exception $e) {
-                // Si el incremento falla (ej. BD desconectada), es un error crítico.
-                // No continuamos y lo registramos, pero el usuario no verá este error.
-                Log::critical('¡FALLO EL INCREMENTO DE CONTADORES!', [
-                    'user_id' => $user->id,
-                    'error' => $e->getMessage(),
-                ]);
+                Log::critical('¡FALLO EL INCREMENTO DE CONTADORES!', ['user_id' => $user->id, 'error' => $e->getMessage()]);
                 throw new Exception('Error interno al procesar la solicitud.');
             }
-            // --- FIN DEL COBRO ---
 
             // 7. Decodificar la respuesta JSON de la IA
             $aiData = json_decode($aiResponseString, true);
 
-            // 8. Manejar Ambigüedad
+            // 8. Flujo A: Ambigüedad (ÉXITO de Feedback)
             if ($aiData && isset($aiData['error'])) {
-                // El usuario PAGA por este error (ya cobramos)
-                throw new Exception($aiData['error'], Response::HTTP_BAD_REQUEST);
+                $errorMessage = $aiData['error'];
+                $missingContext = $aiData['missing_context'] ?? [];
+                Log::warning('IA detectó ambigüedad:', ['error' => $errorMessage, 'missing_context' => $missingContext]);
+
+                $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage);
+
+                return $this->sendResponse(
+                    data: [
+                        'feedback' => [
+                            'error' => $errorMessage,
+                            'missing_context' => $missingContext
+                        ],
+                        'conversation_id' => $conversationId,
+                        'usage' => $usageData
+                    ],
+                    message: 'La IA necesita más información.'
+                );
             }
 
-            // 9. Extraer el SQL
-            if (!$aiData || !isset($aiData['sql'])) {
-                // El usuario PAGA por este error (ya cobramos)
-                throw new Exception('La IA devolvió un formato de respuesta inesperado.');
+            // 9. Flujo B: Éxito de SQL
+            if ($aiData && isset($aiData['sql'])) {
+                $sqlQuery = $aiData['sql'];
+
+                // 10. Pasar el SQL *limpio* al "Guardián de Seguridad"
+                $this->sqlValidationService->validate($sqlQuery);
+
+                // 11. --- ÉXITO ---
+                $wasSuccessful = true;
+                $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, $sqlQuery, $usageData, $wasSuccessful, null);
+
+                return $this->sendResponse(
+                    data: [
+                        'sql' => $sqlQuery,
+                        'usage' => $usageData,
+                        'conversation_id' => $conversationId
+                    ],
+                    message: 'Traducción generada y validada exitosamente.'
+                );
             }
-            $sqlQuery = $aiData['sql'];
 
-            // 10. Pasar el SQL *limpio* al "Guardián de Seguridad"
-            // El usuario PAGA por este error (ya cobramos)
-            $this->sqlValidationService->validate($sqlQuery);
-
-            // 11. --- ÉXITO ---
-            $wasSuccessful = true;
-            $this->logToHistory($user, $userQuestion, $schemaDefinitions, $dialect, $aiResponseString, $sqlQuery, $usageData, $wasSuccessful, null);
-
-            return $this->sendResponse(
-                data: [
-                    'sql' => $sqlQuery,
-                    'usage' => $usageData
-                ],
-                message: 'Traducción generada y validada exitosamente.'
-            );
+            // 12. Flujo C: Error Inesperado de Formato
+            throw new Exception('La IA devolvió un formato de respuesta inesperado.');
 
         } catch (SQLValidationException $e) {
             $errorMessage = 'Validación de SQL fallida: ' . $e->getMessage();
             Log::warning($errorMessage, ['query' => $sqlQuery ?? $aiResponseString]);
-            // Registramos el fallo (el usuario ya pagó)
-            $this->logToHistory($user, $userQuestion, $schemaDefinitions, $dialect, $aiResponseString, null, $usageData, false, $errorMessage);
-            return $this->sendError(
-                'La consulta generada no es segura y ha sido rechazada: ' . $e->getMessage(),
-                Response::HTTP_BAD_REQUEST
-            );
+            $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage);
+            return $this->sendError($errorMessage, Response::HTTP_BAD_REQUEST);
 
         } catch (Exception $e) {
             $errorMessage = $e->getMessage();
             $httpCode = ($e->getCode() >= 400 && $e->getCode() < 600) ? $e->getCode() : Response::HTTP_INTERNAL_SERVER_ERROR;
 
-            // Si el error ocurrió ANTES del cobro (ej. "Acceso no autorizado"), $usageData estará vacío
-            // Si ocurrió DESPUÉS del cobro (ej. "Ambigüedad"), $usageData estará lleno
+            $errorData = null;
+            if ($httpCode === Response::HTTP_BAD_REQUEST) {
+                $aiData = json_decode($aiResponseString, true);
+                $errorData = $aiData['missing_context'] ?? null;
+            }
+
             Log::error('Error en TranslateController: ' . $errorMessage);
-            $this->logToHistory($user, $userQuestion, $schemaDefinitions, $dialect, $aiResponseString, null, $usageData, false, $errorMessage);
+            $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage);
 
             return $this->sendError(
                 'El servicio de traducción falló: ' . $errorMessage,
-                $httpCode
+                $httpCode,
+                $errorData
             );
         }
     }
 
     /**
      * Método auxiliar para guardar el registro en la tabla prompt_history.
-     * (La firma del método cambió para aceptar el User object)
      */
-    private function logToHistory(User $user, string $question, array $schemaDefinitions, string $dialect, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage): void
+    private function logToHistory(User $user, ?string $conversationId, string $question, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage): void
     {
-        // Si la pregunta está vacía (ej. falló la validación de autorización), no loguear
         if (empty($question) && empty($rawResponse)) {
             return;
         }
 
         try {
             $user->promptHistories()->create([
+                'conversation_id' => $conversationId,
                 'question' => $question,
-                'schema_context' => implode("\n\n", $schemaDefinitions),
-                'dialect' => $dialect,
                 'raw_response' => $rawResponse,
                 'generated_sql' => $sqlQuery,
                 'was_successful' => $wasSuccessful,

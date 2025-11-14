@@ -17,10 +17,13 @@ return new class extends Migration
             // Quién hizo la solicitud
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
 
+            // Un ID de chat, nullable. Se puede generar en el cliente (ej. UUID).
+            $table->string('conversation_id')->nullable()->index();
+
             // Información de la solicitud
             $table->longText('question'); // "Tráeme los casos..."
-            $table->longText('schema_context'); // El string de "CREATE TABLE..." que enviamos
-            $table->string('dialect');
+            $table->longText('schema_context')->nullable(); // El string de "CREATE TABLE..." que enviamos
+            $table->string('dialect')->nullable();
 
             // Información de la respuesta
             $table->longText('raw_response'); // El JSON crudo de la IA

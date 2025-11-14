@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\SchemaTable;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -93,11 +94,11 @@ class DatabaseSeeder extends Seeder
             'user_id' => $adminUser->id,
             'name' => 'Traro Obi Cases',
             'dialect' => 'mariadb',
-            'database_name_prefix' => 'traro_obi',
+            'database_name_prefix' => 'grupoint_obi_cases',
         ]);
 
         // Crear tabla de casos en el esquema
-        \App\Models\SchemaTable::create([
+       SchemaTable::create([
             'schema_id' => $schema->id,
             'table_name' => 'cases',
             'definition' => "CREATE TABLE `cases` (
@@ -149,16 +150,39 @@ class DatabaseSeeder extends Seeder
   `decision_status` enum('en espera','aprobado','bajo deducible','rechazado aseguradora','rechazado liquidadora','impugnado','rechazado') DEFAULT NULL,
   `payment_status` enum('pendiente','cobranza','parcialmente pagado','pagado','cobranza online') DEFAULT NULL,
   `overall_status` enum('en proceso','con pendientes','cerrado') NOT NULL DEFAULT 'en proceso',
-  PRIMARY KEY (`id`),
-  KEY `cases_agreement_id_foreign` (`agreement_id`),
-  KEY `cases_accident_type_id_foreign` (`accident_type_id`),
-  CONSTRAINT `cases_accident_type_id_foreign` FOREIGN KEY (`accident_type_id`) REFERENCES `accident_types` (`id`),
-  CONSTRAINT `cases_agreement_id_foreign` FOREIGN KEY (`agreement_id`) REFERENCES `agreements` (`id`)
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=24623 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            'column_metadata' => [
+                ['col' => 'id', 'desc' => 'ID del Caso', 'sql_def' => '`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT', 'is_default' => true, 'instructions' => null],
+                ['col' => 'state', 'desc' => 'Estado del caso', 'sql_def' => "`state` varchar(120) NOT NULL DEFAULT 'Ingreso'", 'is_default' => false, 'instructions' => "IMPORTANTE: Los valores de esta columna tienen formato FQCN (ej: 'App\\Models\\State\\Ingreso'). Si buscas 'Ingreso', usa SIEMPRE: WHERE state LIKE '%Ingreso'"],
+                ['col' => 'code', 'desc' => 'Código', 'sql_def' => '`code` varchar(12) DEFAULT NULL', 'is_default' => true, 'instructions' => null],
+                ['col' => 'created_at', 'desc' => 'Creado', 'sql_def' => '`created_at` datetime NOT NULL DEFAULT current_timestamp()', 'is_default' => false, 'instructions' => null],
+                ['col' => 'property_address', 'desc' => 'Direccion de la propiedad', 'sql_def' => '`property_address` varchar(255) NOT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'inspection_date', 'desc' => 'F Visita', 'sql_def' => '`inspection_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'document_signing_date', 'desc' => 'Fecha firma documentos', 'sql_def' => '`document_signing_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'complaint_date', 'desc' => 'Fecha de denuncia', 'sql_def' => '`complaint_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'collection_date', 'desc' => 'Fecha recaudacion', 'sql_def' => '`collection_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'budget_sending_date', 'desc' => 'Fecha envio presupuesto', 'sql_def' => '`budget_sending_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'settlement_report_date', 'desc' => 'Fecha informe de liquidacion', 'sql_def' => '`settlement_report_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'probable_payment_date', 'desc' => 'Fecha de pago', 'sql_def' => '`probable_payment_date` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'accident_number', 'desc' => 'Nro Siniestro', 'sql_def' => '`accident_number` varchar(50) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'bank_service_number', 'desc' => 'Nro atencion banco', 'sql_def' => '`bank_service_number` varchar(50) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'advisory_amount', 'desc' => 'Monto asesoria', 'sql_def' => '`advisory_amount` int(11) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'date_of_loss', 'desc' => 'Fecha del siniestro', 'sql_def' => '`date_of_loss` date DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'approved_amount', 'desc' => 'Monto aprobado', 'sql_def' => '`approved_amount` int(11) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'amount_owed', 'desc' => 'Monto adeudado', 'sql_def' => '`amount_owed` int(11) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'amount_owed_including_vat', 'desc' => 'Deuda mas IVA', 'sql_def' => '`amount_owed_including_vat` int(11) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'amount_paid', 'desc' => 'Monto pagado', 'sql_def' => '`amount_paid` int(11) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'payment_status', 'desc' => 'Recaudacion estado', 'sql_def' => "`payment_status` enum('pendiente','cobranza','parcialmente pagado','pagado','cobranza online') DEFAULT NULL", 'is_default' => false, 'instructions' => null],
+                ['col' => 'overall_status', 'desc' => 'Estado general', 'sql_def' => "`overall_status` enum('en proceso','con pendientes','cerrado') NOT NULL DEFAULT 'en proceso'", 'is_default' => false, 'instructions' => null],
+                ['col' => 'customer_id', 'desc' => 'ID del Cliente', 'sql_def' => '`customer_id` bigint(20) unsigned DEFAULT NULL', 'is_default' => true, 'instructions' => 'Usar para JOIN con la tabla customers'],
+                ['col' => 'bank_id', 'desc' => 'ID del Banco', 'sql_def' => '`bank_id` bigint(20) unsigned DEFAULT NULL', 'is_default' => true, 'instructions' => 'Usar para JOIN con la tabla bancos'],
+                ['col' => 'commune_id', 'desc' => 'ID de Comuna', 'sql_def' => '`commune_id` bigint(20) unsigned DEFAULT NULL', 'is_default' => true, 'instructions' => 'Usar para JOIN con la tabla comunas']
+            ]
         ]);
 
-        // Crear tabla de customers en el mismo esquema
-        \App\Models\SchemaTable::create([
+        // 3. Crear la tabla 'customers'
+        SchemaTable::create([
             'schema_id' => $schema->id,
             'table_name' => 'customers',
             'definition' => "CREATE TABLE `customers` (
@@ -186,6 +210,27 @@ class DatabaseSeeder extends Seeder
   PRIMARY KEY (`id`),
   UNIQUE KEY `customers_dni_unique` (`dni`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8982 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            'column_metadata' => [
+                ['col' => 'id', 'desc' => 'ID del Cliente', 'sql_def' => '`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT', 'is_default' => true, 'instructions' => null],
+                ['col' => 'name', 'desc' => 'Nombre', 'sql_def' => '`name` varchar(100) NOT NULL', 'is_default' => true, 'instructions' => null],
+                ['col' => 'lastname', 'desc' => 'Apellido', 'sql_def' => '`lastname` varchar(100) DEFAULT NULL', 'is_default' => true, 'instructions' => null],
+                ['col' => 'full_name', 'desc' => 'Nombre completo', 'sql_def' => '`full_name` varchar(100) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'dni', 'desc' => 'RUT', 'sql_def' => '`dni` varchar(20) DEFAULT NULL', 'is_default' => true, 'instructions' => null],
+                ['col' => 'username', 'desc' => 'Nombre de usuario', 'sql_def' => '`username` varchar(50) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'serial_number', 'desc' => 'Numero de serie', 'sql_def' => '`serial_number` varchar(15) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'email', 'desc' => 'Email', 'sql_def' => '`email` varchar(100) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'address', 'desc' => 'Dirección', 'sql_def' => '`address` varchar(255) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'phone', 'desc' => 'Teléfono', 'sql_def' => '`phone` varchar(15) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'phone2', 'desc' => 'Teléfono 2', 'sql_def' => '`phone2` varchar(15) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'gender', 'desc' => 'Género', 'sql_def' => '`gender` char(1) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'marital_status', 'desc' => 'Estado civil', 'sql_def' => '`marital_status` varchar(50) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'occupation', 'desc' => 'Profesión', 'sql_def' => '`occupation` varchar(100) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'nationality', 'desc' => 'Nacionalidad', 'sql_def' => '`nationality` varchar(50) DEFAULT NULL', 'is_default' => false, 'instructions' => null],
+                ['col' => 'is_enabled', 'desc' => 'Habilitado', 'sql_def' => '`is_enabled` tinyint(1) DEFAULT 1', 'is_default' => false, 'instructions' => null],
+                ['col' => 'commune_id', 'desc' => 'FK de Comuna', 'sql_def' => '`commune_id` bigint(20) unsigned DEFAULT NULL', 'is_default' => true, 'instructions' => 'Usar para JOIN con la tabla comunas'],
+                ['col' => 'assigned_agent', 'desc' => 'Agente asignado (FK de users)', 'sql_def' => '`assigned_agent` bigint(20) unsigned DEFAULT NULL', 'is_default' => true, 'instructions' => 'Usar para JOIN con la tabla users'],
+                ['col' => 'comments', 'desc' => 'Comentarios', 'sql_def' => '`comments` longtext DEFAULT NULL', 'is_default' => false, 'instructions' => null]
+            ]
         ]);
     }
 }

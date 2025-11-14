@@ -1,4 +1,3 @@
-###
 
 ### LOGIN - Obtener token de autenticación
 POST http://localhost:8000/api/login
@@ -87,7 +86,7 @@ Authorization: Bearer {{access_token}}
 
 ###
 
-### TRANSLATE - Traducir consulta natural a SQL
+### TRANSLATE - test largo nivel usuario ignorante
 POST http://localhost:8000/api/translate
 Authorization: Bearer 1|DX7Dt8UDXnbSrfk8lSUpw04Pe50KvNUlcjfqjmEqb5ef9e35
 Content-Type: application/json
@@ -97,9 +96,8 @@ Content-Type: application/json
   "question": "ola nesecito un informe pa la reunion. dame un resumen de los casos k entraron este año 2025 (osea created_at despues del 2025-01-01). pero solo los k no estan cerrados (el overall_status tiene k ser 'en proceso'). que lo muestre segun el id banco, cuantos casos tiene (un conteo), la suma de toda la plata k se aprobo (approved_amount) y la suma de lo k se a pagado (amount_paid). a y tambien ponme la resta de lo aprobado menos lo pagado pa ver la deuda. solo muestrame los k tienen mas de 2 casos pendientes. ordenalos del k tiene mas plata por pagar (la resta esa k te dije) al k tiene menos."
 }
 
-###
 
-### TRANSLATE - Traducir consulta natural a SQL
+### TRANSLATE - test normal
 POST http://localhost:8000/api/translate
 Authorization: Bearer 1|cet1oWyPLAZJqLEHa7RAXx6uzjh4GwJJ4aI4iNsa718b68a0
 Content-Type: application/json
@@ -109,6 +107,48 @@ Content-Type: application/json
   "schema_table_ids": [
     1,2
   ]
+}
+
+
+### TRANSLATE - test prompt
+POST http://localhost:8000/api/translate
+Authorization: Bearer 2|vHbpQYZntqdGoXbZrTypVvQrDvwqktlLGdMUxcwG9a5838ed
+Content-Type: application/json
+
+{
+  "question": "traeme los rut de clientes que tengan mas de 1 caso que este en ingreso",
+  "schema_table_ids": [
+    1,
+    2
+  ],
+  "schema_config": [
+    {
+      "table_id": 1,
+      "use_full_schema": false,
+      "include_columns": [
+        "state"
+      ]
+    },
+    {
+      "table_id": 2,
+      "use_full_schema": false,
+      "include_columns": []
+    }
+  ]
+}
+
+### TRANSLATE - prueba de ambiguedad
+POST http://localhost:8000/api/translate
+Authorization: Bearer 1|cet1oWyPLAZJqLEHa7RAXx6uzjh4GwJJ4aI4iNsa718b68a0
+Content-Type: application/json
+
+{
+  "question": "borrar todos los datos de casos",
+  "schema_table_ids": [
+    1
+  ],
+    "conversation_id": "2083bbf2-3ebd-4760-b639-e08cf419105b"
+
 }
 
 ###

@@ -21,7 +21,8 @@ class SchemaTableController extends Controller
         $validated = $request->validate([
             'schema_id' => 'required|integer|exists:schemas,id',
             'table_name' => 'required|string|max:255',
-            'definition' => 'required|string', // "CREATE TABLE ..."
+            'definition' => 'required|string',
+            'column_metadata' => 'nullable|array', // <-- Validación
         ]);
 
         // --- Comprobación de Autorización (Paso 1: ¿Existe el esquema?) ---
@@ -64,6 +65,7 @@ class SchemaTableController extends Controller
         $validated = $request->validate([
             'table_name' => 'sometimes|required|string|max:255',
             'definition' => 'sometimes|required|string',
+            'column_metadata' => 'nullable|array',
         ]);
 
         $schemaTable->update($validated);

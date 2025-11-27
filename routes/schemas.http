@@ -139,16 +139,14 @@ Content-Type: application/json
 
 ### TRANSLATE - prueba de ambiguedad
 POST http://localhost:8000/api/translate
-Authorization: Bearer 1|cet1oWyPLAZJqLEHa7RAXx6uzjh4GwJJ4aI4iNsa718b68a0
+Authorization: Bearer 4|ygDleJeuAqmDDexAKIeu7iHI97IH8oxpWLA7OrjCa2c04f01
 Content-Type: application/json
 
 {
-  "question": "borrar todos los datos de casos",
+  "question": "dame una lista de los tags",
   "schema_table_ids": [
-    1
-  ],
-    "conversation_id": "2083bbf2-3ebd-4760-b639-e08cf419105b"
-
+    23
+  ]
 }
 
 ###

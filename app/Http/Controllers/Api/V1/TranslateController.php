@@ -101,6 +101,7 @@ class TranslateController extends Controller
             $dialect = $schema->dialect;
             $dbPrefix = $schema->database_name_prefix;
             $schemaTablesObjects = $filteredTables->all(); // Usamos las tablas filtradas
+            $schemaContext = $this->togetherAIService->getSchemaContext($schemaTablesObjects);
 
             // 5. Llamar al "Traductor"
             $serviceResponse = $this->togetherAIService->generateSql(
@@ -137,7 +138,7 @@ class TranslateController extends Controller
                 $missingContext = $aiData['missing_context'] ?? [];
                 Log::warning('IA detectó ambigüedad:', ['error' => $errorMessage, 'missing_context' => $missingContext]);
 
-                $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage);
+                $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage, $schemaContext, $dialect);
 
                 return $this->sendResponse(
                     data: [
@@ -161,7 +162,7 @@ class TranslateController extends Controller
 
                 // 11. --- ÉXITO ---
                 $wasSuccessful = true;
-                $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, $sqlQuery, $usageData, $wasSuccessful, null);
+                $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, $sqlQuery, $usageData, $wasSuccessful, null, $schemaContext, $dialect);
 
                 return $this->sendResponse(
                     data: [
@@ -179,7 +180,7 @@ class TranslateController extends Controller
         } catch (SQLValidationException $e) {
             $errorMessage = 'Validación de SQL fallida: ' . $e->getMessage();
             Log::warning($errorMessage, ['query' => $sqlQuery ?? $aiResponseString]);
-            $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage);
+            $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage, $schemaContext ?? null, $dialect ?? null);
             return $this->sendError($errorMessage, Response::HTTP_BAD_REQUEST);
 
         } catch (Exception $e) {
@@ -193,7 +194,7 @@ class TranslateController extends Controller
             }
 
             Log::error('Error en TranslateController: ' . $errorMessage);
-            $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage);
+            $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, $errorMessage, $schemaContext ?? null, $dialect ?? null);
 
             return $this->sendError(
                 'El servicio de traducción falló: ' . $errorMessage,
@@ -206,7 +207,7 @@ class TranslateController extends Controller
     /**
      * Método auxiliar para guardar el registro en la tabla prompt_history.
      */
-    private function logToHistory(User $user, ?string $conversationId, string $question, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage): void
+    private function logToHistory(User $user, ?string $conversationId, string $question, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage, ?string $schemaContext, ?string $dialect): void
     {
         if (empty($question) && empty($rawResponse)) {
             return;
@@ -216,6 +217,8 @@ class TranslateController extends Controller
             $user->promptHistories()->create([
                 'conversation_id' => $conversationId,
                 'question' => $question,
+                'schema_context' => $schemaContext,
+                'dialect' => $dialect,
                 'raw_response' => $rawResponse,
                 'generated_sql' => $sqlQuery,
                 'was_successful' => $wasSuccessful,

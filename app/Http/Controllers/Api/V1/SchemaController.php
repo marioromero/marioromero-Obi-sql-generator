@@ -27,14 +27,26 @@ class SchemaController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'dialect' => 'required|string|max:50', // 'mysql', 'postgres', etc.
+            'name' => 'required|string|max:255', // El agente envía el connection_key aquí
+            'dialect' => 'required|string|max:50',
             'database_name_prefix' => 'nullable|string|max:100',
         ]);
 
-        $schema = $request->user()->schemas()->create($validated);
+        // LÓGICA UPSERT (LA SOLUCIÓN AL PROBLEMA DE DUPLICADOS)
+        // Buscamos un esquema que coincida en USUARIO + NOMBRE
+        $schema = \App\Models\Schema::updateOrCreate(
+            [
+                'user_id' => $request->user()->id,
+                'name' => $validated['name']
+            ],
+            [
+                // Solo actualizamos estos campos si ya existe, o los usamos para crear
+                'dialect' => $validated['dialect'],
+                'database_name_prefix' => $validated['database_name_prefix'] ?? null
+            ]
+        );
 
-        return $this->sendResponse($schema, 'Esquema creado exitosamente.', Response::HTTP_CREATED);
+        return $this->sendResponse($schema, 'Esquema sincronizado correctamente.', Response::HTTP_OK);
     }
 
     /**

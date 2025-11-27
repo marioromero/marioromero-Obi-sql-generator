@@ -106,10 +106,10 @@ class TogetherAIService
     }
 
     /**
-     * Construye el "mega-prompt" dinámicamente usando la metadata.
+     * Construye el contexto del esquema como string.
      * @param array $schemaTablesObjects Array de App\Models\SchemaTable
      */
-    private function buildSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
+    public function getSchemaContext(array $schemaTablesObjects): string
     {
         $schemaStringParts = [];
 
@@ -157,7 +157,16 @@ class TogetherAIService
             $schemaStringParts[] = $tableString;
         }
 
-        $schemaString = implode("\n\n", $schemaStringParts);
+        return implode("\n\n", $schemaStringParts);
+    }
+
+    /**
+     * Construye el "mega-prompt" dinámicamente usando la metadata.
+     * @param array $schemaTablesObjects Array de App\Models\SchemaTable
+     */
+    private function buildSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
+    {
+        $schemaString = $this->getSchemaContext($schemaTablesObjects);
 
         // 4. Lógica del prefijo (no cambia)
         $prefixRule = "";

@@ -75,12 +75,12 @@ class TranslateController extends Controller
             $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
                 $config = $configMap->get($table->id);
 
-                // A. Si no hay config para esta tabla, o 'use_full_schema' es true, mandamos todo.
-                if (!$config || ($config['use_full_schema'] ?? true)) {
+                // A. Si 'use_full_schema' es true, mandamos todo.
+                if (($config['use_full_schema'] ?? false)) {
                     return $table;
                 }
 
-                // B. Si 'use_full_schema' es false, filtramos.
+                // B. Si no hay config para esta tabla, o 'use_full_schema' es false, usamos solo columnas is_default
                 $requestedColumns = $config['include_columns'] ?? [];
 
                 // --- FUSIÓN INTELIGENTE ---
@@ -88,7 +88,14 @@ class TranslateController extends Controller
                     ->filter(function ($meta) use ($requestedColumns) {
                         $colName = $meta['col'];
                         $isDefault = $meta['is_default'] ?? false;
-                        return in_array($colName, $requestedColumns) || $isDefault;
+
+                        // Si hay columnas solicitadas, solo incluimos esas + is_default
+                        if (!empty($requestedColumns)) {
+                            return in_array($colName, $requestedColumns) || $isDefault;
+                        }
+
+                        // Si no hay columnas solicitadas, solo incluimos is_default
+                        return $isDefault;
                     })
                     ->values()
                     ->all();

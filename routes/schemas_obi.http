@@ -1,6 +1,5 @@
-
 ### LOGIN - Obtener token de autenticación
-POST http://localhost:8000/api/login
+POST https://www.obi.reports.nodox.cl/api/login
 Content-Type: application/json
 
 {
@@ -11,7 +10,7 @@ Content-Type: application/json
 ###
 
 ### GET /api/me - Obtener información del usuario autenticado
-GET http://localhost:8000/api/me
+GET https://www.obi.reports.nodox.cl/api/me
 Authorization: Bearer {{access_token}}
 
 ###
@@ -19,11 +18,11 @@ Authorization: Bearer {{access_token}}
 ### SCHEMAS CRUD - Gestión de Esquemas (Carpetas)
 
 ### GET /api/schemas - Listar todos los esquemas del usuario
-GET http://localhost:8000/api/schemas
+GET https://www.obi.reports.nodox.cl/api/schemas
 Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
 
 ### POST /api/schemas - Crear un nuevo esquema
-POST http://localhost:8000/api/schemas
+POST https://www.obi.reports.nodox.cl/api/schemas
 Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
 Content-Type: application/json
 
@@ -33,11 +32,11 @@ Content-Type: application/json
 }
 
 ### GET /api/schemas/{id} - Obtener un esquema específico
-GET http://localhost:8000/api/schemas/1
+GET https://www.obi.reports.nodox.cl/api/schemas/1
 Authorization: Bearer {{access_token}}
 
 ### PUT /api/schemas/{id} - Actualizar un esquema
-PUT http://localhost:8000/api/schemas/1
+PUT https://www.obi.reports.nodox.cl/api/schemas/1
 Authorization: Bearer {{access_token}}
 Content-Type: application/json
 
@@ -47,7 +46,7 @@ Content-Type: application/json
 }
 
 ### DELETE /api/schemas/{id} - Eliminar un esquema
-DELETE http://localhost:8000/api/schemas/1
+DELETE https://www.obi.reports.nodox.cl/api/schemas/1
 Authorization: Bearer {{access_token}}
 
 ###
@@ -55,7 +54,7 @@ Authorization: Bearer {{access_token}}
 ### SCHEMA TABLES CRUD - Gestión de Tablas de Esquema (Archivos)
 
 ### POST /api/schema-tables - Crear una nueva tabla en un esquema
-POST http://localhost:8000/api/schema-tables
+POST https://www.obi.reports.nodox.cl/api/schema-tables
 Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
 Content-Type: application/json
 
@@ -66,11 +65,11 @@ Content-Type: application/json
 }
 
 ### GET /api/schema-tables/{id} - Obtener una tabla específica
-GET http://localhost:8000/api/schema-tables/1
+GET https://www.obi.reports.nodox.cl/api/schema-tables/1
 Authorization: Bearer {{access_token}}
 
 ### PUT /api/schema-tables/{id} - Actualizar una tabla
-PUT http://localhost:8000/api/schema-tables/1
+PUT https://www.obi.reports.nodox.cl/api/schema-tables/1
 Authorization: Bearer {{access_token}}
 Content-Type: application/json
 
@@ -81,13 +80,13 @@ Content-Type: application/json
 }
 
 ### DELETE /api/schema-tables/{id} - Eliminar una tabla
-DELETE http://localhost:8000/api/schema-tables/1
+DELETE https://www.obi.reports.nodox.cl/api/schema-tables/1
 Authorization: Bearer {{access_token}}
 
 ###
 
 ### TRANSLATE - test largo nivel usuario ignorante
-POST http://localhost:8000/api/translate
+POST https://www.obi.reports.nodox.cl/api/translate
 Authorization: Bearer 1|DX7Dt8UDXnbSrfk8lSUpw04Pe50KvNUlcjfqjmEqb5ef9e35
 Content-Type: application/json
 
@@ -96,9 +95,8 @@ Content-Type: application/json
   "question": "ola nesecito un informe pa la reunion. dame un resumen de los casos k entraron este año 2025 (osea created_at despues del 2025-01-01). pero solo los k no estan cerrados (el overall_status tiene k ser 'en proceso'). que lo muestre segun el id banco, cuantos casos tiene (un conteo), la suma de toda la plata k se aprobo (approved_amount) y la suma de lo k se a pagado (amount_paid). a y tambien ponme la resta de lo aprobado menos lo pagado pa ver la deuda. solo muestrame los k tienen mas de 2 casos pendientes. ordenalos del k tiene mas plata por pagar (la resta esa k te dije) al k tiene menos."
 }
 
-
 ### TRANSLATE - test normal
-POST http://localhost:8000/api/translate
+POST https://www.obi.reports.nodox.cl/api/translate
 Authorization: Bearer 1|cet1oWyPLAZJqLEHa7RAXx6uzjh4GwJJ4aI4iNsa718b68a0
 Content-Type: application/json
 
@@ -109,9 +107,8 @@ Content-Type: application/json
   ]
 }
 
-
 ### TRANSLATE - test prompt
-POST http://localhost:8000/api/translate
+POST https://www.obi.reports.nodox.cl/api/translate
 Authorization: Bearer 2|vHbpQYZntqdGoXbZrTypVvQrDvwqktlLGdMUxcwG9a5838ed
 Content-Type: application/json
 
@@ -148,23 +145,11 @@ Content-Type: application/json
     23
   ]
 }
-### TRANSLATE - prueba de ambiguedad
-POST http://localhost:8000/api/translate
-Authorization: Bearer 4|ygDleJeuAqmDDexAKIeu7iHI97IH8oxpWLA7OrjCa2c04f01
-Content-Type: application/json
-
-{
-  "question": "dame una lista de los tags",
-  "schema_table_ids": [
-    23
-  ]
-}
 
 ###
 
-
 ### LOGOUT - Cerrar sesión
-POST http://localhost:8000/api/logout
+POST https://www.obi.reports.nodox.cl/api/logout
 Authorization: Bearer {{access_token}}
 
 ###

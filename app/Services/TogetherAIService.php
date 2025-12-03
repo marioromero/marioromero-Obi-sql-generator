@@ -68,6 +68,9 @@ class TogetherAIService
         // 3. Añadir la pregunta actual del usuario
         $messages[] = ['role' => 'user', 'content' => $userQuestion];
 
+        // Registrar el prompt completo que se enviará a la IA
+        Log::debug('Prompt enviado a la IA:', ['messages' => $messages]);
+
         try {
             $response = $this->client->post('chat/completions', [
                 'model' => $this->model,

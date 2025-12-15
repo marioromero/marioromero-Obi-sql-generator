@@ -130,10 +130,16 @@ class TogetherAIService
 
                     $line = "  " . $meta['sql_def'];
 
-                    // Añadir comentarios inteligentes
+                    // Añadir comentarios inteligentes (usar el primer elemento de desc como alias)
                     $comments = [];
                     if (!empty($meta['desc'])) {
-                        $comments[] = "Significa: '" . $meta['desc'] . "'";
+                        $descParts = explode(',', $meta['desc']);
+                        $aliasName = trim($descParts[0]);
+                        $comments[] = "Alias preferido: '" . $aliasName . "'";
+
+                        if (count($descParts) > 1) {
+                            $comments[] = "También conocido como: '" . implode("', '", array_map('trim', array_slice($descParts, 1))) . "'";
+                        }
                     }
                     if (!empty($meta['instructions'])) {
                         $comments[] = "REGLA: " . $meta['instructions'];
@@ -180,7 +186,7 @@ class TogetherAIService
 RULE;
         }
 
-        // 5. El Prompt Definitivo (no cambia)
+        // 5. El Prompt Definitivo (actualizado)
         return <<<PROMPT
 Eres un asistente experto en SQL que convierte lenguaje natural en consultas SQL.
 Tu única tarea es generar una consulta SQL precisa y optimizada.
@@ -194,8 +200,9 @@ Tu única tarea es generar una consulta SQL precisa y optimizada.
     * Si la pregunta requiere una columna que NO está presente en la definición de la tabla (porque está oculta), DEBES responder con 'missing_context'.
     * NO uses `SELECT *` a menos que el usuario pida explícitamente "todas las columnas".
     * Si se viola esta regla, DEBES responder con el FORMATO DE AMBIGÜEDAD.
-6.  **PRESENTACIÓN:**
-    * Usa las descripciones del diccionario como ALIAS en el SQL (ej. `SELECT id AS "ID del Caso"`).
+6.  **ALIASES:**
+    * Usa el primer elemento del campo "Alias preferido" como ALIAS en el SQL (ej. `SELECT id AS "ID del Caso"`).
+    * Sigue las reglas especiales indicadas en "REGLA:" para el procesamiento de datos.
 
 ### FORMATO DE RESPUESTA OBLIGATORIO
 Tu respuesta debe ser SIEMPRE un único objeto JSON válido.
@@ -213,7 +220,7 @@ Tu respuesta debe ser SIEMPRE un único objeto JSON válido.
   "missing_context": ["La columna 'fecha' no está visible en el esquema proporcionado."]
 }
 
-### ESQUEMA DE BASE DE DATOS (PARCIAL)
+### ESQUEMA DE BASE DE DATOS (vista que posee columnas de varias tablas)
 {$schemaString}
 PROMPT;
     }

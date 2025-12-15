@@ -80,27 +80,21 @@ class TranslateController extends Controller
                     return $table;
                 }
 
-                // B. Si no hay config para esta tabla, o 'use_full_schema' es false, usamos solo columnas is_default
+                // B. Filtrar solo las columnas solicitadas
                 $requestedColumns = $config['include_columns'] ?? [];
 
-                // --- FUSIÓN INTELIGENTE ---
-                $filteredMetadata = collect($table->column_metadata)
-                    ->filter(function ($meta) use ($requestedColumns) {
-                        $colName = $meta['col'];
-                        $isDefault = $meta['is_default'] ?? false;
+                if (!empty($requestedColumns)) {
+                    $filteredMetadata = collect($table->column_metadata)
+                        ->filter(function ($meta) use ($requestedColumns) {
+                            $colName = $meta['col'];
+                            return in_array($colName, $requestedColumns);
+                        })
+                        ->values()
+                        ->all();
 
-                        // Si hay columnas solicitadas, solo incluimos esas + is_default
-                        if (!empty($requestedColumns)) {
-                            return in_array($colName, $requestedColumns) || $isDefault;
-                        }
+                    $table->column_metadata = $filteredMetadata;
+                }
 
-                        // Si no hay columnas solicitadas, solo incluimos is_default
-                        return $isDefault;
-                    })
-                    ->values()
-                    ->all();
-
-                $table->column_metadata = $filteredMetadata;
                 return $table;
             });
 

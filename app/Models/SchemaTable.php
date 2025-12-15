@@ -14,7 +14,6 @@ class SchemaTable extends Model
         'schema_id',
         'table_name',
         'column_metadata',
-        'definition',
     ];
 
     protected $casts = [

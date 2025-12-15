@@ -9,6 +9,23 @@ Content-Type: application/json
 
 ###
 
+### REGISTER - Registrar nuevo usuario
+POST https://www.obi.reports.nodox.cl/api/register
+Content-Type: application/json
+
+{
+    "name": "Traro",
+    "username": "traro",
+    "company_name": "Asesorías Traro",
+    "email": "asesoriastraro@gmail.com",
+    "password": "password123",
+    "password_confirmation": "password123",
+    "plan_id": 1,
+    "status": "active"
+}
+
+###
+
 ### GET /api/me - Obtener información del usuario autenticado
 GET https://www.obi.reports.nodox.cl/api/me
 Authorization: Bearer {{access_token}}
@@ -19,16 +36,16 @@ Authorization: Bearer {{access_token}}
 
 ### GET /api/schemas - Listar todos los esquemas del usuario
 GET https://www.obi.reports.nodox.cl/api/schemas
-Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
+Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 
 ### POST /api/schemas - Crear un nuevo esquema
 POST https://www.obi.reports.nodox.cl/api/schemas
-Authorization: Bearer 2|XxZziv8LawwWcRCh0k3JJHVfEDcfrqZGJth4cwHdea275f53
+Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 Content-Type: application/json
 
 {
-    "name": "Mi Primer Esquema",
-    "dialect": "mysql"
+    "name": "v_cases_details",
+    "dialect": "mariadb"
 }
 
 ### GET /api/schemas/{id} - Obtener un esquema específico
@@ -62,6 +79,17 @@ Content-Type: application/json
   "schema_id": 1,
   "table_name": "orders",
   "definition": "CREATE TABLE orders (\n  order_id INT PRIMARY KEY AUTO_INCREMENT,\n  user_id INT,\n  total_amount DECIMAL(10, 2),\n  order_status VARCHAR(50) DEFAULT 'pending',\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  FOREIGN KEY (user_id) REFERENCES users(id)\n);"
+}
+###
+POST https://www.obi.reports.nodox.cl/api/schema-tables
+Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
+Content-Type: application/json
+
+{
+  "schema_id": 16,
+  "table_name": "grupoint_obi_cases.v_cases_details",
+  "definition": "CREATE OR REPLACE ALGORITHM = UNDEFINED VIEW `grupoint_obi_cases`.`v_cases_details` AS select `c`.`id` AS `id`,`c`.`state` AS `state`,`c`.`code` AS `code`,`c`.`sent_to_acepta` AS `sent_to_acepta`,`c`.`priority_id` AS `priority_id`,`c`.`created_at` AS `created_at`,`c`.`agreement_id` AS `agreement_id`,`c`.`property_address` AS `property_address`,`c`.`inspection_date` AS `inspection_date`,`c`.`document_signing_date` AS `document_signing_date`,`c`.`complaint_date` AS `complaint_date`,`c`.`collection_date` AS `collection_date`,`c`.`budget_sending_date` AS `budget_sending_date`,`c`.`settlement_report_date` AS `settlement_report_date`,`c`.`probable_payment_date` AS `probable_payment_date`,`c`.`online_collection_date` AS `online_collection_date`,`c`.`accident_number` AS `accident_number`,`c`.`bank_service_number` AS `bank_service_number`,`c`.`advisory_amount` AS `advisory_amount`,`c`.`accident_type_id` AS `accident_type_id`,`c`.`is_duplicated` AS `is_duplicated`,`c`.`description` AS `description`,`c`.`resolution` AS `resolution`,`c`.`comments_programming` AS `comments_programming`,`c`.`date_of_loss` AS `date_of_loss`,`c`.`property_type` AS `property_type`,`c`.`contestation_date` AS `contestation_date`,`c`.`customer_id` AS `customer_id`,`c`.`created_by` AS `created_by`,`c`.`assigned_user` AS `assigned_user`,`c`.`commune_id` AS `commune_id`,`c`.`consultant_id` AS `consultant_id`,`c`.`approved_amount` AS `approved_amount`,`c`.`uf_approved` AS `uf_approved`,`c`.`amount_owed` AS `amount_owed`,`c`.`amount_owed_including_vat` AS `amount_owed_including_vat`,`c`.`amount_paid` AS `amount_paid`,`c`.`bank_id` AS `bank_id`,`c`.`insurer_id` AS `insurer_id`,`c`.`loss_adjuster_id` AS `loss_adjuster_id`,`c`.`signature_status` AS `signature_status`,`c`.`denounce_status` AS `denounce_status`,`c`.`scheduling_status` AS `scheduling_status`,`c`.`visit_status` AS `visit_status`,`c`.`budget_status` AS `budget_status`,`c`.`decision_status` AS `decision_status`,`c`.`payment_status` AS `payment_status`,`c`.`overall_status` AS `overall_status`,`c`.`updated_at` AS `updated_at`,`c`.`softdeleted` AS `softdeleted`,`cf_last`.`fecha_documentos_listos` AS `fecha_documentos_listos`,`cf_last`.`contrato_enviado_a_acepta` AS `contrato_enviado_a_acepta`,`cf_last`.`fecha_firma_contrato` AS `fecha_firma_contrato`,`cf_last`.`mandato_enviado_a_acepta` AS `mandato_enviado_a_acepta`,`cf_last`.`fecha_firma_mandato` AS `fecha_firma_mandato`,`cf_last`.`numero_notificaciones_documentos_enviados` AS `numero_notificaciones_documentos_enviados`,`cf_last`.`numero_notificaciones_documento_pendiente` AS `numero_notificaciones_documento_pendiente`,`cf_last`.`notificacion_documento_firmado` AS `notificacion_documento_firmado`,case when json_contains(json_extract(`confsm`.`content`,'$.steps_with_whatsapp_notifications'),json_quote(substring_index(`c`.`state`,'\\',-1))) then 1 else 0 end AS `available_notifications`,case when json_contains(json_extract(`confsm`.`content`,' $.steps_with_whatsapp_notifications'),json_quote(substring_index(`c`.`state`,' \\',-1))) then `cf_last`.`active_notifications` else 0 end AS `active_notifications`,`sch_last`.`message_sent` AS `schedule_message_sent`,`sch_last`.`message_confirmed` AS `schedule_message_confirmed`,`sch_last`.`inspection_failed` AS `schedule_inspection_failed`,`sch_last`.`inspection_time` AS `schedule_inspection_time`,`sch_last`.`liquidator_inspector_info` AS `schedule_liquidator_inspector_info`,`csl`.`last_state_change_user_id` AS `last_state_change_user_id`,`lusr`.`name` AS `last_state_change_user_name`,`csl`.`last_state_change_at` AS `last_state_change_at`,concat_ws(' ',`cu`.`name`,`cu`.`lastname`) AS `customer_name`,`cu`.`dni` AS `customer_dni`,`cu`.`address` AS `customer_address`,`cmu`.`name` AS `customer_commune_name`,`cu`.`phone` AS `phone`,`cu`.`phone2` AS `phone2`,`cu`.`serial_number` AS `serial_number`,`cu`.`email` AS `customer_email`,`cu`.`assigned_agent` AS `agent_id`,`aag`.`name` AS `agent_name`,`b`.`name` AS `bank_name`,`ins`.`name` AS `insurer_name`,`la`.`name` AS `loss_adjuster_name`,`p`.`name` AS `priority_name`,`ag`.`name` AS `agreement_name`,`at`.`name` AS `accident_type_name`,`cons`.`name` AS `consultant_name`,`asg`.`name` AS `assigned_user_name`,`crt`.`name` AS `created_by_name`,`cco`.`name` AS `commune_name`,`sl`.`step_logs_json` AS `step_logs_json`,`cflj`.`case_flow_last_json` AS `case_flow_last_json` from (((((((((((((((((((((`grupoint_obi_cases`.`cases` `c` left join `grupoint_obi_customers`.`customers` `cu` on(`cu`.`id` = `c`.`customer_id`)) left join `grupoint_obi_geography`.`communes` `cmu` on(`cmu`.`id` = `cu`.`commune_id`)) left join `grupoint_obi_banks`.`banks` `b` on(`b`.`id` = `c`.`bank_id`)) left join `grupoint_obi_banks`.`insurers` `ins` on(`ins`.`id` = `c`.`insurer_id`)) left join `grupoint_obi_banks`.`loss_adjusters` `la` on(`la`.`id` = `c`.`loss_adjuster_id`)) left join `grupoint_obi_cases`.`priorities` `p` on(`p`.`id` = `c`.`priority_id`)) left join `grupoint_obi_cases`.`agreements` `ag` on(`ag`.`id` = `c`.`agreement_id`)) left join `grupoint_obi_cases`.`accident_types` `at` on(`at`.`id` = `c`.`accident_type_id`)) left join `grupoint_traro`.`users` `cons` on(`cons`.`id` = `c`.`consultant_id`)) left join `grupoint_traro`.`users` `asg` on(`asg`.`id` = `c`.`assigned_user`)) left join `grupoint_traro`.`users` `crt` on(`crt`.`id` = `c`.`created_by`)) left join `grupoint_traro`.`users` `aag` on(`aag`.`id` = `cu`.`assigned_agent`)) left join `grupoint_obi_geography`.`communes` `cco` on(`cco`.`id` = `c`.`commune_id`)) left join `grupoint_obi_configurations`.`types` `tsm` on(`tsm`.`name` = ' States_machine')) left join `grupoint_obi_configurations`.`configurations` `confsm` on(`confsm`.`type_id` = `tsm`.`id`)) left join (select `cf1`.`id` AS `id`,`cf1`.`crm_caso_id` AS `crm_caso_id`,`cf1`.`obi_case_id` AS `obi_case_id`,`cf1`.`rut` AS `rut`,`cf1`.`nombre` AS `nombre`,`cf1`.`telefono` AS `telefono`,`cf1`.`email` AS `email`,`cf1`.`fecha_documentos_listos` AS `fecha_documentos_listos`,`cf1`.`contrato_enviado_a_acepta` AS `contrato_enviado_a_acepta`,`cf1`.`contrato_codigo` AS `contrato_codigo`,`cf1`.`contrato_firmado` AS `contrato_firmado`,`cf1`.`fecha_firma_contrato` AS `fecha_firma_contrato`,`cf1`.`firma_contrato_empresa` AS `firma_contrato_empresa`,`cf1`.`mandato_enviado_a_acepta` AS `mandato_enviado_a_acepta`,`cf1`.`mandato_codigo` AS `mandato_codigo`,`cf1`.`mandato_firmado` AS `mandato_firmado`,`cf1`.`fecha_firma_mandato` AS `fecha_firma_mandato`,`cf1`.`firma_mandato_empresa` AS `firma_mandato_empresa`,`cf1`.`numero_notificaciones_documentos_enviados` AS `numero_notificaciones_documentos_enviados`,`cf1`.`numero_notificaciones_documento_pendiente` AS `numero_notificaciones_documento_pendiente`,`cf1`.`notificacion_documento_firmado` AS `notificacion_documento_firmado`,`cf1`.`active_notifications` AS `active_notifications`,`cf1`.`user_id` AS `user_id` from (`grupoint_traro`.`case_flows` `cf1` join (select `grupoint_traro`.`case_flows`.`obi_case_id` AS `obi_case_id`,max(`grupoint_traro`.`case_flows`.`id`) AS `max_id` from `grupoint_traro`.`case_flows` group by `grupoint_traro`.`case_flows`.`obi_case_id`) `m` on(`m`.`obi_case_id` = `cf1`.`obi_case_id` and `m`.`max_id` = `cf1`.`id`))) `cf_last` on(`cf_last`.`obi_case_id` = `c`.`id`)) left join (select `cf1`.`obi_case_id` AS `obi_case_id`,json_object(' id',`cf1`.`id`,' crm_caso_id',`cf1`.`crm_caso_id`,' obi_case_id',`cf1`.`obi_case_id`,' fecha_documentos_listos',`cf1`.`fecha_documentos_listos`,' contrato_enviado_a_acepta',`cf1`.`contrato_enviado_a_acepta`,' fecha_firma_contrato',`cf1`.`fecha_firma_contrato`,' mandato_enviado_a_acepta',`cf1`.`mandato_enviado_a_acepta`,' fecha_firma_mandato',`cf1`.`fecha_firma_mandato`,' numero_notificaciones_documentos_enviados',`cf1`.`numero_notificaciones_documentos_enviados`,' numero_notificaciones_documento_pendiente',`cf1`.`numero_notificaciones_documento_pendiente`,' notificacion_documento_firmado',`cf1`.`notificacion_documento_firmado`,' active_notifications',`cf1`.`active_notifications`,' user_id',`cf1`.`user_id`) AS `case_flow_last_json` from (`grupoint_traro`.`case_flows` `cf1` join (select `grupoint_traro`.`case_flows`.`obi_case_id` AS `obi_case_id`,max(`grupoint_traro`.`case_flows`.`id`) AS `max_id` from `grupoint_traro`.`case_flows` group by `grupoint_traro`.`case_flows`.`obi_case_id`) `m` on(`m`.`obi_case_id` = `cf1`.`obi_case_id` and `m`.`max_id` = `cf1`.`id`))) `cflj` on(`cflj`.`obi_case_id` = `c`.`id`)) left join (select `l`.`case_id` AS `case_id`,`l`.`user_id` AS `last_state_change_user_id`,`l`.`created_at` AS `last_state_change_at` from (`grupoint_obi_cases`.`case_step_logs` `l` join (select `grupoint_obi_cases`.`case_step_logs`.`case_id` AS `case_id`,max(`grupoint_obi_cases`.`case_step_logs`.`created_at`) AS `max_created_at` from `grupoint_obi_cases`.`case_step_logs` group by `grupoint_obi_cases`.`case_step_logs`.`case_id`) `recent` on(`recent`.`case_id` = `l`.`case_id` and `recent`.`max_created_at` = `l`.`created_at`))) `csl` on(`csl`.`case_id` = `c`.`id`)) left join `grupoint_traro`.`users` `lusr` on(`lusr`.`id` = `csl`.`last_state_change_user_id`)) left join (select `l`.`case_id` AS `case_id`,json_arrayagg(json_object(' id',`l`.`id`,' case_id',`l`.`case_id`,' from_state',`l`.`from_state`,' to_state',`l`.`to_state`,' from_sub',`l`.`from_sub`,' to_sub',`l`.`to_sub`,' type ',`l`.`type`,' user_id',`l`.`user_id`,' comments',`l`.`comments`,' created_at', `l`.`created_at`) order by `l`.`created_at` ASC) AS `step_logs_json` from `grupoint_obi_cases`.`case_step_logs` `l` group by `l`.`case_id`) `sl` on (`sl`.`case_id` = `c`.`id`)) left join ( select `s1`.`case_id` AS `case_id`,`s1`.`message_sent` AS `message_sent`,`s1`.`message_confirmed` AS `message_confirmed`,`s1`.`inspection_failed` AS `inspection_failed`,`s1`.`inspection_time` AS `inspection_time`,`s1`.`liquidator_inspector_info` AS `liquidator_inspector_info` from (`grupoint_obi_scheduling`.`schedules` `s1` join ( select `grupoint_obi_scheduling`.`schedules`.`case_id` AS `case_id`,max(`grupoint_obi_scheduling`.`schedules`.`id`) AS `max_id` from `grupoint_obi_scheduling`.`schedules` group by `grupoint_obi_scheduling`.`schedules`.`case_id`) `sm` on (`sm`.`case_id` = `s1`.`case_id` and `sm`.`max_id` = `s1`.`id`))) `sch_last` on (`sch_last`.`case_id` = `c`.`id`)) where `c`.`softdeleted` = 0;",
+    "column_metadata":
 }
 
 ### GET /api/schema-tables/{id} - Obtener una tabla específica
@@ -140,7 +168,7 @@ Authorization: Bearer 4|ygDleJeuAqmDDexAKIeu7iHI97IH8oxpWLA7OrjCa2c04f01
 Content-Type: application/json
 
 {
-  "question": "dame una lista de los tags",
+  "question": "dame una lista de los primeros 5 casos",
   "schema_table_ids": [
     23
   ]

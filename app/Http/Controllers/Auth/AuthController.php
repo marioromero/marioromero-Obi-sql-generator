@@ -89,4 +89,47 @@ class AuthController extends Controller
             message: 'Información del usuario obtenida'
         );
     }
+
+    /**
+     * Maneja la solicitud de registro de usuario.
+     */
+    public function register(Request $request)
+    {
+        // 1. Validar los datos de entrada
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:users,username',
+            'company_name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'password' => 'required|string|min:8|confirmed',
+            'plan_id' => 'required|exists:plans,id',
+        ]);
+
+        // 2. Crear el usuario
+        $user = User::create([
+            'name' => $request->name,
+            'username' => $request->username,
+            'company_name' => $request->company_name,
+            'email' => $request->email,
+            'password' => $request->password, // Se hashea automáticamente por el cast
+            'plan_id' => $request->plan_id,
+            'status' => 'trial', // Valor por defecto
+        ]);
+
+        Log::info("Usuario registrado exitosamente: {$user->username}");
+
+        // 3. Crear token de acceso para el nuevo usuario
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        // 4. Devolver respuesta exitosa
+        return $this->sendResponse(
+            data: [
+                'access_token' => $token,
+                'token_type' => 'Bearer',
+                'user' => $user,
+            ],
+            message: 'Usuario registrado exitosamente',
+            httpCode: Response::HTTP_CREATED // Código HTTP 201
+        );
+    }
 }

@@ -34,7 +34,7 @@ public function store(Request $request)
         // 1. Comprobación de Autorización
         $schema = Schema::find($validated['schema_id']);
 
-        if (!$schema || $request->user()->id !== $schema->user_id) {
+        if (!$schema || (int)$request->user()->id !== (int)$schema->user_id) {
             // Log::warning("⛔ Acceso denegado. Usuario ID: {$request->user()->id} vs Schema Owner: " . ($schema->user_id ?? 'N/A'));
             return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
         }
@@ -82,11 +82,18 @@ public function store(Request $request)
     /**
      * Muestra una definición de tabla específica.
      */
-    public function show(Request $request, SchemaTable $schemaTable)
+    public function show(Request $request, $id)
     {
+        // Cargar el modelo manualmente igual que TranslateController
+        $schemaTable = SchemaTable::with('schema')->find($id);
+
+        if (!$schemaTable) {
+            return $this->sendError('Tabla de esquema no encontrada.', Response::HTTP_NOT_FOUND);
+        }
+
         // --- Comprobación de Autorización ---
         // (Verifica que el usuario sea el dueño del "esquema padre")
-        if ($request->user()->id !== $schemaTable->schema->user_id) {
+        if ((int)$request->user()->id !== (int)$schemaTable->schema->user_id) {
             return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
         }
 
@@ -96,10 +103,17 @@ public function store(Request $request)
     /**
      * Actualiza una definición de tabla.
      */
-    public function update(Request $request, SchemaTable $schemaTable)
+    public function update(Request $request, $id)
     {
+        // Cargar el modelo manualmente igual que TranslateController
+        $schemaTable = SchemaTable::with('schema')->find($id);
+
+        if (!$schemaTable) {
+            return $this->sendError('Tabla de esquema no encontrada.', Response::HTTP_NOT_FOUND);
+        }
+
         // --- Comprobación de Autorización ---
-        if ($request->user()->id !== $schemaTable->schema->user_id) {
+        if ((int)$request->user()->id !== (int)$schemaTable->schema->user_id) {
             return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
         }
 
@@ -117,10 +131,17 @@ public function store(Request $request)
     /**
      * Elimina una definición de tabla.
      */
-    public function destroy(Request $request, SchemaTable $schemaTable)
+    public function destroy(Request $request, $id)
     {
+        // Cargar el modelo manualmente igual que TranslateController
+        $schemaTable = SchemaTable::with('schema')->find($id);
+
+        if (!$schemaTable) {
+            return $this->sendError('Tabla de esquema no encontrada.', Response::HTTP_NOT_FOUND);
+        }
+
         // --- Comprobación de Autorización ---
-        if ($request->user()->id !== $schemaTable->schema->user_id) {
+        if ((int)$request->user()->id !== (int)$schemaTable->schema->user_id) {
             return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
         }
 

@@ -92,9 +92,9 @@ Content-Type: application/json
     "column_metadata":
 }
 
-### GET /api/schema-tables/{id} - Obtener una tabla específica
-GET https://www.obi.reports.nodox.cl/api/schema-tables/1
-Authorization: Bearer {{access_token}}
+### GET /api/schema-tables/16 - Obtener una tabla específica
+GET https://www.obi.reports.nodox.cl/api/schema-tables/16
+Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 
 ### PUT /api/schema-tables/{id} - Actualizar una tabla
 PUT https://www.obi.reports.nodox.cl/api/schema-tables/1
@@ -164,13 +164,13 @@ Content-Type: application/json
 
 ### TRANSLATE - prueba de ambiguedad
 POST https://www.obi.reports.nodox.cl/api/translate
-Authorization: Bearer 4|ygDleJeuAqmDDexAKIeu7iHI97IH8oxpWLA7OrjCa2c04f01
+Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 Content-Type: application/json
 
 {
-  "question": "dame una lista de los primeros 5 casos",
+  "question": "dame los casos del presente mes que estén en el estado de Ingreso",
   "schema_table_ids": [
-    23
+    16
   ]
 }
 

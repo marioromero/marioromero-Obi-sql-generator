@@ -22,9 +22,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- GESTIÓN DE TABLAS DE ESQUEMA (ARCHIVOS) ---
     // (Usamos rutas separadas para un CRUD de API simple)
     Route::post('/schema-tables', [SchemaTableController::class, 'store']);
-    Route::get('/schema-tables/{schemaTable}', [SchemaTableController::class, 'show']);
-    Route::put('/schema-tables/{schemaTable}', [SchemaTableController::class, 'update']);
-    Route::delete('/schema-tables/{schemaTable}', [SchemaTableController::class, 'destroy']);
+    Route::get('/schema-tables/{id}', [SchemaTableController::class, 'show']);
+    Route::put('/schema-tables/{id}', [SchemaTableController::class, 'update']);
+    Route::delete('/schema-tables/{id}', [SchemaTableController::class, 'destroy']);
 
     Route::post('/translate', [TranslateController::class, 'translate'])->middleware('usage.limits');
 

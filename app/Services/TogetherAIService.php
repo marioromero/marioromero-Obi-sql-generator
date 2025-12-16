@@ -26,10 +26,12 @@ class TogetherAIService
             throw new Exception('La API Key de Together.ai no está configurada.');
         }
 
-        $this->client = Http::withoutVerifying() // <- Recordatorio: Quitar esto en producción
-            ->withToken($this->apiKey)
+        // Laravel 12 / Http Client
+        $this->client = Http::withToken($this->apiKey)
             ->timeout(60)
-            ->baseUrl($this->baseUrl);
+            ->baseUrl($this->baseUrl)
+            ->withHeaders(['Content-Type' => 'application/json']);
+        // ->withoutVerifying(); // Solo usar en local si tienes problemas de SSL
     }
 
     /**
@@ -38,45 +40,46 @@ class TogetherAIService
     public function generateSql(
         string $userQuestion,
         string $dialect,
-        array $schemaTablesObjects, // <-- Ahora son Objetos con metadata filtrada
+        array $schemaTablesObjects,
         ?string $dbPrefix,
         User $user,
         ?string $conversationId
     ): array {
 
-        // 1. Construir el prompt del sistema dinámicamente
+        // 1. Construir el prompt del sistema optimizado
         $systemPrompt = $this->buildSystemPrompt($dialect, $schemaTablesObjects, $dbPrefix);
 
-        // 2. Construir el historial de mensajes
+        // 2. Construir historial
         $messages = [];
         $messages[] = ['role' => 'system', 'content' => $systemPrompt];
 
         if ($conversationId) {
             $history = PromptHistory::where('user_id', $user->id)
                 ->where('conversation_id', $conversationId)
-                ->orderBy('created_at', 'desc')
-                ->limit(3)
+                ->latest()
+                ->take(4) // Aumentamos un poco el contexto previo
                 ->get()
                 ->reverse();
 
             foreach ($history as $record) {
-                $messages[] = ['role' => 'user', 'content' => $record->question];
-                $messages[] = ['role' => 'assistant', 'content' => $record->raw_response];
+                // Filtramos mensajes vacíos por seguridad
+                if (!empty($record->question) && !empty($record->raw_response)) {
+                    $messages[] = ['role' => 'user', 'content' => $record->question];
+                    $messages[] = ['role' => 'assistant', 'content' => $record->raw_response];
+                }
             }
         }
 
-        // 3. Añadir la pregunta actual del usuario
         $messages[] = ['role' => 'user', 'content' => $userQuestion];
 
-        // Registrar el prompt completo que se enviará a la IA
-        Log::debug('Prompt enviado a la IA:', ['messages' => $messages]);
+        Log::debug('Prompt System Generado:', ['content' => $systemPrompt]);
 
         try {
             $response = $this->client->post('chat/completions', [
                 'model' => $this->model,
                 'messages' => $messages,
-                'temperature' => 0.0,
-                'max_tokens' => 1024,
+                'temperature' => 0.0, // Cero para máxima determinismo en SQL
+                'max_tokens' => 1500,
                 'response_format' => ['type' => 'json_object'],
             ]);
 
@@ -84,6 +87,7 @@ class TogetherAIService
 
             $data = $response->json();
             $aiResponse = $data['choices'][0]['message']['content'] ?? null;
+
             if (empty($aiResponse)) {
                 throw new Exception('La respuesta de la IA estaba vacía.');
             }
@@ -100,127 +104,138 @@ class TogetherAIService
             ];
 
         } catch (RequestException $e) {
-            Log::error('Error en la API de Together.ai: ' . $e->getMessage(), ['status' => $e->response->status(), 'response' => $e->response->body()]);
-            throw new Exception('El servicio de traducción no está disponible: ' . $e->getMessage());
+            Log::error('TogetherAI Error: ' . $e->getMessage(), ['body' => $e->response->body()]);
+            throw new Exception('Error de comunicación con el servicio de IA: ' . $e->getMessage());
         } catch (Exception $e) {
-            Log::error('Error en TogetherAIService: ' . $e->getMessage());
+            Log::error('TogetherAI Exception: ' . $e->getMessage());
             throw $e;
         }
     }
 
     /**
-     * Construye el contexto del esquema como string.
-     * @param array $schemaTablesObjects Array de App\Models\SchemaTable
+     * Construye un contexto rico semánticamente basado en el JSON del frontend.
      */
     public function getSchemaContext(array $schemaTablesObjects): string
     {
         $schemaStringParts = [];
 
         foreach ($schemaTablesObjects as $table) {
-            // 1. Cabecera de la tabla
-            $tableString = "TABLE: " . $table->table_name . "\n";
-            $tableString .= "CREATE TABLE `" . $table->table_name . "` (\n";
+            $tableName = $table->table_name;
+            $tableString = "TABLA/VISTA: `{$tableName}`\n";
+            $tableString .= "DESCRIPCIÓN: Esta fuente de datos contiene información consolidada.\n";
+            $tableString .= "COLUMNAS DISPONIBLES:\n";
 
-            // 2. Construir cuerpo de la tabla basado en metadata filtrada
             $columnsDefinitions = [];
 
-            if (!empty($table->column_metadata)) {
+            if (!empty($table->column_metadata) && is_array($table->column_metadata)) {
                 foreach ($table->column_metadata as $meta) {
-                    if (empty($meta['sql_def'])) continue; // Saltar si la metadata está incompleta
+                    // Validar integridad mínima
+                    if (empty($meta['col']) || empty($meta['sql_def'])) continue;
 
-                    $line = "  " . $meta['sql_def'];
+                    $colName = $meta['col'];
+                    $sqlType = $meta['sql_def'];
 
-                    // Añadir comentarios inteligentes (usar el primer elemento de desc como alias)
-                    $comments = [];
+                    // 1. Procesar "desc" para extraer sinónimos
+                    // Ejemplo desc: "Estado, Situación, Status"
+                    $synonyms = [];
+                    $primaryConcept = $colName; // Fallback
+
                     if (!empty($meta['desc'])) {
-                        $descParts = explode(',', $meta['desc']);
-                        $aliasName = trim($descParts[0]);
-                        $comments[] = "Alias preferido: '" . $aliasName . "'";
-
+                        $descParts = array_map('trim', explode(',', $meta['desc']));
+                        $primaryConcept = $descParts[0]; // El primero es el concepto principal
                         if (count($descParts) > 1) {
-                            $comments[] = "También conocido como: '" . implode("', '", array_map('trim', array_slice($descParts, 1))) . "'";
+                            $synonyms = array_slice($descParts, 1);
                         }
                     }
-                    if (!empty($meta['instructions'])) {
-                        $comments[] = "REGLA: " . $meta['instructions'];
+
+                    // 2. Procesar Origen (Entidad de negocio)
+                    $origin = $meta['origin'] ?? 'Sistema';
+
+                    // 3. Procesar Instrucciones (Lógica de transformación)
+                    $instruction = $meta['instructions'] ?? '';
+
+                    // Construcción de la línea de definición para la IA
+                    // Formato: - col_name (TYPE) | Concepto: "X" | [Entidad: Y] | {Instrucciones}
+                    $line = "  - `{$colName}` ({$sqlType})";
+                    $line .= " | Concepto Principal: \"{$primaryConcept}\"";
+
+                    if (!empty($synonyms)) {
+                        $line .= " | Sinónimos: \"" . implode('", "', $synonyms) . "\"";
                     }
 
-                    if (!empty($comments)) {
-                        $line .= " -- " . implode(". ", $comments);
+                    $line .= " | Entidad: \"{$origin}\"";
+
+                    if (!empty($instruction)) {
+                        // Etiqueta fuerte para forzar lógica SQL
+                        $line .= " | [LOGIC_REQUIRED]: \"{$instruction}\"";
                     }
 
                     $columnsDefinitions[] = $line;
                 }
             }
 
-            // 3. Inyectar advertencia de "Contexto Parcial"
             if (empty($columnsDefinitions)) {
-                $tableString .= "  -- (ADVERTENCIA: Todas las columnas están ocultas. Pide contexto si es necesario.)\n";
+                $tableString .= "  (ADVERTENCIA: Contexto restringido. No hay columnas visibles para esta tabla en esta solicitud.)\n";
             } else {
-                $tableString .= implode(",\n", $columnsDefinitions) . "\n";
-                // Añadimos una línea comentada al final para avisar a la IA
-                $tableString .= "  -- ... (Otras columnas pueden estar ocultas por optimización. Si necesitas una columna que no ves aquí, responde con el error 'missing_context')\n";
+                $tableString .= implode("\n", $columnsDefinitions) . "\n";
             }
 
-            $tableString .= ");";
             $schemaStringParts[] = $tableString;
         }
 
-        return implode("\n\n", $schemaStringParts);
+        return implode("\n\n--------------------------------\n\n", $schemaStringParts);
     }
 
     /**
-     * Construye el "mega-prompt" dinámicamente usando la metadata.
-     * @param array $schemaTablesObjects Array de App\Models\SchemaTable
+     * Prompt del sistema diseñado para interpretar las reglas de negocio del JSON.
      */
     private function buildSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
     {
         $schemaString = $this->getSchemaContext($schemaTablesObjects);
 
-        // 4. Lógica del prefijo (no cambia)
         $prefixRule = "";
         if (!empty($dbPrefix)) {
-            $prefixRule = <<<RULE
-4.  **Prefijo de BD (Obligatorio):** TODAS las tablas en la consulta SQL generada DEBEN usar el prefijo '{$dbPrefix}'.
-    Ejemplo de formato: `SELECT * FROM {$dbPrefix}.nombre_tabla;`
-RULE;
+            $prefixRule = "   - Prefijo de BD OBLIGATORIO: `{$dbPrefix}`. (Ej: `FROM {$dbPrefix}.tabla`).";
         }
 
-        // 5. El Prompt Definitivo (actualizado)
         return <<<PROMPT
-Eres un asistente experto en SQL que convierte lenguaje natural en consultas SQL.
-Tu única tarea es generar una consulta SQL precisa y optimizada.
+Eres un Arquitecto de Datos y Experto en SQL ({$dialect}).
+Tu objetivo es traducir lenguaje natural a una consulta SQL precisa, respetando reglas de negocio estrictas definidas en los metadatos.
 
-### REGLAS
-1.  **Contexto:** Basa tu consulta ÚNICAMENTE en el siguiente esquema de base de datos y dialecto.
-2.  **Dialecto:** Genera la consulta usando sintaxis de: {$dialect}.
-3.  **Precisión:** No inventes nombres de columnas o tablas que no estén en el esquema proporcionado.
+### TUS INSTRUCCIONES PRIORITARIAS
+
+1.  **INTERPRETACIÓN DE METADATOS (CRÍTICO):**
+    Analiza la sección "COLUMNAS DISPONIBLES" cuidadosamente.
+    * **Concepto Principal y Sinónimos:** Usa estos términos para entender a qué columna se refiere el usuario (Ej: si piden "Estado", busca en "Concepto Principal" o "Sinónimos").
+    * **[LOGIC_REQUIRED]:** Si una columna tiene esta etiqueta, NO la selecciones directamente. DEBES escribir código SQL para transformar el dato según la instrucción.
+        * *Ejemplo:* Si `state` dice "[LOGIC_REQUIRED]: valor después del último slash", tu SQL debe ser `SUBSTRING_INDEX(state, '/', -1)` (o equivalente en {$dialect}), y NO simplemente `state`.
+
+2.  **SINTAXIS Y REGLAS SQL:**
+    * Dialecto: **{$dialect}**.
+    * Usa siempre alias de tabla (ej: `t1.columna`).
+    * Si el usuario pide nombres de columnas específicos en el SELECT (como "Muéstrame el Estado"), usa `AS 'Nombre Amigable'` basado en el "Concepto Principal".
 {$prefixRule}
-5.  **REGLA DE AMBIGÜEDAD ESTRICTA:** No debes adivinar ni asumir nada.
-    * Si la pregunta requiere una columna que NO está presente en la definición de la tabla (porque está oculta), DEBES responder con 'missing_context'.
-    * NO uses `SELECT *` a menos que el usuario pida explícitamente "todas las columnas".
-    * Si se viola esta regla, DEBES responder con el FORMATO DE AMBIGÜEDAD.
-6.  **ALIASES:**
-    * Usa el primer elemento del campo "Alias preferido" como ALIAS en el SQL (ej. `SELECT id AS "ID del Caso"`).
-    * Sigue las reglas especiales indicadas en "REGLA:" para el procesamiento de datos.
 
-### FORMATO DE RESPUESTA OBLIGATORIO
-Tu respuesta debe ser SIEMPRE un único objeto JSON válido.
+3.  **SEGURIDAD Y ALCANCE:**
+    * SOLO usa las tablas y columnas listadas en el contexto.
+    * Si el usuario pide un dato que NO está en las "COLUMNAS DISPONIBLES" (aunque sepas que existe en una tabla real), responde con un error de `missing_context`.
+    * Nunca inventes columnas ni uses `SELECT *`.
 
-**FORMATO DE ÉXITO:**
+### FORMATO DE RESPUESTA (JSON)
+
+**Caso Éxito:**
 {
   "sql": "SELECT ...",
-  "thoughts": "..."
+  "thoughts": "Breve explicación de por qué elegiste esas columnas y qué transformaciones lógicas aplicaste."
 }
 
-**FORMATO DE AMBIGÜEDAD / ERROR:**
+**Caso Falta Información (Ambigüedad):**
 {
   "error": "missing_context",
-  "thoughts": "...",
-  "missing_context": ["La columna 'fecha' no está visible en el esquema proporcionado."]
+  "missing_context": ["Explica qué columna o dato falta para responder la pregunta."]
 }
 
-### ESQUEMA DE BASE DE DATOS (vista que posee columnas de varias tablas)
+### ESQUEMA DE DATOS DEFINIDO
 {$schemaString}
 PROMPT;
     }

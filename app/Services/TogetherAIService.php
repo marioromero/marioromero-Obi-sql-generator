@@ -208,26 +208,24 @@ Tu objetivo es traducir lenguaje natural a una consulta SQL precisa, respetando 
 PROMPT;
     }
 
-    /**
-     * Genera SQL + Configuración visual para gráficos.
-     */
+
     public function generateChartSql(
-        string $userQuestion,
-        string $dialect,
-        array $schemaTablesObjects,
+        string  $userQuestion,
+        string  $dialect,
+        array   $schemaTablesObjects,
         ?string $dbPrefix,
-        User $user,
+        User    $user,
         ?string $conversationId
-    ): array {
+    ): array
+    {
         // Usamos un System Prompt especializado para visualización
         $systemPrompt = $this->buildChartSystemPrompt($dialect, $schemaTablesObjects, $dbPrefix);
 
-        // Construcción de mensajes (mismo patrón que antes)
+        // Construcción de mensajes
         $messages = [];
         $messages[] = ['role' => 'system', 'content' => $systemPrompt];
 
-        // Historial (opcional: podrías querer limitarlo o no incluirlo para no sesgar el gráfico)
-        // Por ahora lo incluimos para mantener contexto de filtros previos
+        // Historial (opcional, útil para contexto)
         if ($conversationId) {
             $history = PromptHistory::where('user_id', $user->id)
                 ->where('conversation_id', $conversationId)
@@ -250,7 +248,7 @@ PROMPT;
             $response = $this->client->post('chat/completions', [
                 'model' => $this->model,
                 'messages' => $messages,
-                'temperature' => 0.0,
+                'temperature' => 0.0, // Cero alucinación
                 'max_tokens' => 1500,
                 'response_format' => ['type' => 'json_object'],
             ]);
@@ -264,7 +262,7 @@ PROMPT;
             }
 
             return [
-                'chart_response' => $aiResponse, // Ojo: esto traerá SQL + Metadata de gráfico
+                'chart_response' => $aiResponse, // Esto trae SQL + Chart Config
                 'usage' => $data['usage'] ?? [],
             ];
 
@@ -279,6 +277,7 @@ PROMPT;
      */
     private function buildChartSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
     {
+        // Reutilizamos el contexto rico (con instrucciones lógicas y alias)
         $schemaString = $this->getSchemaContext($schemaTablesObjects);
 
         $prefixRule = "";
@@ -291,20 +290,28 @@ Eres un Experto en Visualización de Datos y SQL ({$dialect}).
 Tu objetivo es generar una consulta SQL para alimentar un gráfico (ApexCharts) basado en la solicitud del usuario.
 
 ### TUS REGLAS DE ORO (VISUALIZACIÓN):
-1.  **AGREGACIÓN OBLIGATORIA:** Los gráficos resumen datos. Tu SQL casi SIEMPRE debe tener `GROUP BY`.
+
+1.  **AGREGACIÓN OBLIGATORIA (GROUP BY):**
+    * Los gráficos resumen datos. Tu SQL **SIEMPRE** debe tener `GROUP BY` (a menos que pidan un KPI único).
     * Usa `COUNT(*)`, `SUM(columna)`, `AVG(columna)` para el eje Y (Series).
     * Usa columnas de categoría (Estado, Fecha, Usuario) para el eje X (Categorías).
-2.  **FECHAS EN EJE X:** Si piden evolución temporal ("por mes", "por día"), formatea la fecha en el SQL para que sea legible.
+
+2.  **INTERPRETACIÓN DE METADATOS:**
+    * Respeta las etiquetas `[LOGIC_REQUIRED]` del esquema.
+    * Si una columna requiere extracción (ej: "última palabra después del slash"), aplica esa lógica EN EL `GROUP BY` y en el `SELECT`.
+
+3.  **FECHAS EN EJE X:**
+    * Si piden evolución temporal ("por mes", "por día"), formatea la fecha en el SQL para que sea legible y agrupe correctamente.
     * Ejemplo MySQL: `DATE_FORMAT(date_col, '%Y-%m')` para meses.
-3.  **TIPOS DE GRÁFICO:** Sugiere el mejor tipo:
+
+4.  **TIPOS DE GRÁFICO:** Sugiere el mejor tipo en `chart_config`:
     * Comparar categorías (ej: estados) -> `"bar"` o `"pie"`.
     * Evolución tiempo (ej: meses) -> `"line"` o `"area"`.
-4.  **SOLO 2 O 3 COLUMNAS:** El SELECT debe ser simple. Columna Agrupadora (X) y Columna Numérica (Y).
 
 {$prefixRule}
 
 ### FORMATO DE RESPUESTA (JSON)
-Debes devolver un JSON con la estructura exacta para que el Frontend sepa cómo pintar el gráfico.
+Debes devolver un JSON con la estructura exacta para que el Frontend (ApexCharts) sepa cómo pintar el gráfico.
 
 **Ejemplo de Respuesta:**
 {
@@ -320,8 +327,8 @@ Debes devolver un JSON con la estructura exacta para que el Frontend sepa cómo 
 }
 
 ### MANEJO DE ERRORES
-Si la pregunta no se puede graficar (ej: "Muestrame el detalle del caso 1"), responde:
-{ "error": "not_chartable", "message": "Esta consulta pide un detalle, no un gráfico. Usa el endpoint de traducción estándar." }
+Si la pregunta no se puede graficar (ej: "Muestrame el detalle del caso 1" o "Lista de usuarios"), responde:
+{ "error": "not_chartable", "message": "Esta consulta pide un detalle, no un gráfico." }
 
 ### ESQUEMA DE DATOS
 {$schemaString}

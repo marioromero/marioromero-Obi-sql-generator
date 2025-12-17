@@ -210,7 +210,7 @@ class TranslateController extends Controller
      */
     public function generateChart(Request $request)
     {
-        // 1. Validar (Igual que antes)
+        // 1. Validar
         $validated = $request->validate([
             'question' => 'required|string|max:1000',
             'conversation_id' => 'nullable|string|max:255',
@@ -235,7 +235,7 @@ class TranslateController extends Controller
         $sqlQuery = null;
 
         try {
-            // 3. Cargar y Validar
+            // 3. Cargar y Validar Seguridad
             $tablesToLoad = SchemaTable::with('schema')->whereIn('id', $tableIds)->get();
             if ($tablesToLoad->isEmpty()) {
                 throw new Exception('No se encontraron tablas.', Response::HTTP_NOT_FOUND);
@@ -245,7 +245,7 @@ class TranslateController extends Controller
                 return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
             }
 
-            // 4. FILTRADO DE COLUMNAS (Misma lógica que translate para consistencia)
+            // 4. FILTRADO DE COLUMNAS (Misma lógica que translate)
             $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
                 $tableClone = clone $table;
                 $config = $configMap->get($table->id);
@@ -264,9 +264,6 @@ class TranslateController extends Controller
                         return isset($meta['is_default']) && $meta['is_default'] === true;
                     });
 
-                    // Nota: En gráficos NO ordenamos visualmente las columnas por input,
-                    // dejamos que la BD/IA decida el orden lógico del GROUP BY
-
                     $tableClone->column_metadata = $filteredCollection->values()->all();
                 }
                 return $tableClone;
@@ -274,6 +271,8 @@ class TranslateController extends Controller
 
             // 5. Llamar a la IA (Método Chart)
             $schemaTablesObjects = $filteredTables->all();
+
+            // Log del contexto para historial
             $schemaContextLog = $this->togetherAIService->getSchemaContext($schemaTablesObjects);
 
             $serviceResponse = $this->togetherAIService->generateChartSql(
@@ -298,8 +297,8 @@ class TranslateController extends Controller
 
             // 7. Procesar JSON
             $aiData = json_decode($aiResponseString, true);
-            if (!$aiData) {
-                // Intento de rescate si viene markdown ```json ... ```
+            // Intento de rescate JSON si viene con markdown
+            if (json_last_error() !== JSON_ERROR_NONE) {
                 if (preg_match('/\{.*\}/s', $aiResponseString, $matches)) {
                     $aiData = json_decode($matches[0], true);
                 }
@@ -309,14 +308,24 @@ class TranslateController extends Controller
                 throw new Exception('La IA no devolvió un JSON válido para gráficos.');
             }
 
-            // Guardar Historial (Reutilizamos la tabla, marcamos generated_sql)
+            // 8. Validación de error "not_chartable"
+            if (isset($aiData['error']) && $aiData['error'] === 'not_chartable') {
+                return $this->sendResponse([
+                    'feedback' => [
+                        'type' => 'not_chartable',
+                        'message' => $aiData['message'] ?? 'No se puede graficar esta consulta.'
+                    ]
+                ], 'Consulta no apta para gráfico.');
+            }
+
+            // 9. Guardar Historial
             $sqlQuery = $aiData['sql'] ?? null;
             $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString, $sqlQuery, $usageData, true, null, $schemaContextLog, $schema->dialect);
 
-            // 8. Respuesta Final
+            // 10. Respuesta Final para el Front
             return $this->sendResponse([
-                'chart_config' => $aiData['chart_config'] ?? null, // Info para ApexCharts
-                'sql' => $sqlQuery,                                // SQL para ejecutar
+                'chart_config' => $aiData['chart_config'] ?? null,
+                'sql' => $sqlQuery,
                 'thoughts' => $aiData['thoughts'] ?? null,
                 'usage' => $usageData,
                 'conversation_id' => $conversationId
@@ -324,6 +333,7 @@ class TranslateController extends Controller
 
         } catch (Exception $e) {
             Log::error('Chart Error: ' . $e->getMessage());
+            $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString ?? '', null, $usageData, false, $e->getMessage(), $schemaContextLog ?? null, $schema->dialect ?? null);
             return $this->sendError('Error generando gráfico: ' . $e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

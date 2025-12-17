@@ -182,6 +182,21 @@ Content-Type: application/json
     ]
 }
 
+### CHARTS
+POST https://www.obi.reports.nodox.cl/api/generate-chart
+Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
+Content-Type: application/json
+
+{
+    "question": "Comparar casos por estado este mes",
+    "tables": [
+        {
+            "id": 16,
+            "columns": ["state", "created_at"]
+        }
+    ]
+}
+
 ###
 
 ### LOGOUT - Cerrar sesión

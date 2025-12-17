@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/schema-tables/{id}', [SchemaTableController::class, 'destroy']);
 
     Route::post('/translate', [TranslateController::class, 'translate'])->middleware('usage.limits');
+    Route::post('/generate-chart', [TranslateController::class, 'generateChart'])->middleware('usage.limits');
 
     // (Aquí irán tus futuras rutas protegidas: /logout, /projects, /tasks, etc.)
 });

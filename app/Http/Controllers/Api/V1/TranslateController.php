@@ -204,6 +204,59 @@ class TranslateController extends Controller
         }
     }
 
+    /**
+     * Nuevo método exclusivo para generar datos de gráficos.
+     */
+    public function generateChart(Request $request)
+    {
+        // 1. Validar la petición (Misma estructura robusta que translate)
+        $validated = $request->validate([
+            'question' => 'required|string|max:1000',
+            'conversation_id' => 'nullable|string|max:255',
+            'tables' => 'required|array|min:1',
+            'tables.*.id' => 'required|integer|exists:schema_tables,id',
+            'tables.*.full_schema' => 'nullable|boolean',
+            'tables.*.columns' => 'nullable|array',
+            'tables.*.columns.*' => 'string',
+        ]);
+
+        $user = $request->user();
+        $conversationId = $validated['conversation_id'] ?? (string) Str::uuid();
+
+        // 2. Extraer IDs
+        $tablesInput = collect($validated['tables']);
+        $tableIds = $tablesInput->pluck('id')->all();
+
+        try {
+            // 3. Cargar Tablas y Validar Seguridad (Esto es crítico probarlo primero)
+            $tablesToLoad = SchemaTable::with('schema')
+                ->whereIn('id', $tableIds)
+                ->get();
+
+            if ($tablesToLoad->isEmpty()) {
+                throw new Exception('No se encontraron las tablas solicitadas.', Response::HTTP_NOT_FOUND);
+            }
+
+            $schema = $tablesToLoad->first()->schema;
+            if ((int)$user->id !== (int)$schema->user_id) {
+                return $this->sendError('Acceso no autorizado al esquema de datos.', Response::HTTP_FORBIDDEN);
+            }
+
+            // --- HASTA AQUÍ LLEGAREMOS EN ESTA PRUEBA ---
+
+            return $this->sendResponse([
+                'status' => 'ready_for_ai',
+                'tables_found' => $tablesToLoad->count(),
+                'schema_owner' => $schema->user_id,
+                'request_user' => $user->id,
+                'message' => 'Validación y permisos correctos. Listo para implementar lógica de gráficos.'
+            ], 'Pre-chequeo exitoso.');
+
+        } catch (Exception $e) {
+            return $this->sendError($e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private function logToHistory(\App\Models\User $user, ?string $conversationId, string $question, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage, ?string $schemaContext, ?string $dialect): void
     {
         try {

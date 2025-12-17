@@ -21,9 +21,10 @@ class TranslateController extends Controller
     use ApiResponser;
 
     public function __construct(
-        protected TogetherAIService $togetherAIService,
+        protected TogetherAIService    $togetherAIService,
         protected SQLValidationService $sqlValidationService
-    ) {
+    )
+    {
     }
 
     public function translate(Request $request)
@@ -43,7 +44,7 @@ class TranslateController extends Controller
 
         $user = $request->user();
         $userQuestion = $validated['question'];
-        $conversationId = $validated['conversation_id'] ?? (string) Str::uuid();
+        $conversationId = $validated['conversation_id'] ?? (string)Str::uuid();
 
         // 2. Extraer IDs y Configuración desde 'tables'
         $tablesInput = collect($validated['tables']);
@@ -209,7 +210,7 @@ class TranslateController extends Controller
      */
     public function generateChart(Request $request)
     {
-        // 1. Validar la petición (Misma estructura robusta que translate)
+        // 1. Validar (Igual que antes)
         $validated = $request->validate([
             'question' => 'required|string|max:1000',
             'conversation_id' => 'nullable|string|max:255',
@@ -221,39 +222,109 @@ class TranslateController extends Controller
         ]);
 
         $user = $request->user();
-        $conversationId = $validated['conversation_id'] ?? (string) Str::uuid();
+        $conversationId = $validated['conversation_id'] ?? (string)Str::uuid();
 
         // 2. Extraer IDs
         $tablesInput = collect($validated['tables']);
         $tableIds = $tablesInput->pluck('id')->all();
+        $configMap = $tablesInput->keyBy('id');
+
+        // Variables de auditoría
+        $aiResponseString = '';
+        $usageData = [];
+        $sqlQuery = null;
 
         try {
-            // 3. Cargar Tablas y Validar Seguridad (Esto es crítico probarlo primero)
-            $tablesToLoad = SchemaTable::with('schema')
-                ->whereIn('id', $tableIds)
-                ->get();
-
+            // 3. Cargar y Validar
+            $tablesToLoad = SchemaTable::with('schema')->whereIn('id', $tableIds)->get();
             if ($tablesToLoad->isEmpty()) {
-                throw new Exception('No se encontraron las tablas solicitadas.', Response::HTTP_NOT_FOUND);
+                throw new Exception('No se encontraron tablas.', Response::HTTP_NOT_FOUND);
             }
-
             $schema = $tablesToLoad->first()->schema;
             if ((int)$user->id !== (int)$schema->user_id) {
-                return $this->sendError('Acceso no autorizado al esquema de datos.', Response::HTTP_FORBIDDEN);
+                return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
             }
 
-            // --- HASTA AQUÍ LLEGAREMOS EN ESTA PRUEBA ---
+            // 4. FILTRADO DE COLUMNAS (Misma lógica que translate para consistencia)
+            $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
+                $tableClone = clone $table;
+                $config = $configMap->get($table->id);
 
+                if (!empty($config['full_schema']) && $config['full_schema'] === true) {
+                    return $tableClone;
+                }
+
+                $requestedColumns = $config['columns'] ?? [];
+
+                if (is_array($tableClone->column_metadata)) {
+                    $metaCollection = collect($tableClone->column_metadata);
+
+                    $filteredCollection = $metaCollection->filter(function ($meta) use ($requestedColumns) {
+                        if (!empty($requestedColumns)) return in_array($meta['col'], $requestedColumns);
+                        return isset($meta['is_default']) && $meta['is_default'] === true;
+                    });
+
+                    // Nota: En gráficos NO ordenamos visualmente las columnas por input,
+                    // dejamos que la BD/IA decida el orden lógico del GROUP BY
+
+                    $tableClone->column_metadata = $filteredCollection->values()->all();
+                }
+                return $tableClone;
+            });
+
+            // 5. Llamar a la IA (Método Chart)
+            $schemaTablesObjects = $filteredTables->all();
+            $schemaContextLog = $this->togetherAIService->getSchemaContext($schemaTablesObjects);
+
+            $serviceResponse = $this->togetherAIService->generateChartSql(
+                $validated['question'],
+                $schema->dialect,
+                $schemaTablesObjects,
+                $schema->database_name_prefix,
+                $user,
+                $conversationId
+            );
+
+            $aiResponseString = $serviceResponse['chart_response'];
+            $usageData = $serviceResponse['usage'];
+
+            // 6. Tokens
+            DB::transaction(function () use ($user, $usageData) {
+                $user->increment('monthly_requests_count');
+                if (isset($usageData['total_tokens'])) {
+                    $user->increment('monthly_token_count', $usageData['total_tokens']);
+                }
+            });
+
+            // 7. Procesar JSON
+            $aiData = json_decode($aiResponseString, true);
+            if (!$aiData) {
+                // Intento de rescate si viene markdown ```json ... ```
+                if (preg_match('/\{.*\}/s', $aiResponseString, $matches)) {
+                    $aiData = json_decode($matches[0], true);
+                }
+            }
+
+            if (!$aiData) {
+                throw new Exception('La IA no devolvió un JSON válido para gráficos.');
+            }
+
+            // Guardar Historial (Reutilizamos la tabla, marcamos generated_sql)
+            $sqlQuery = $aiData['sql'] ?? null;
+            $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString, $sqlQuery, $usageData, true, null, $schemaContextLog, $schema->dialect);
+
+            // 8. Respuesta Final
             return $this->sendResponse([
-                'status' => 'ready_for_ai',
-                'tables_found' => $tablesToLoad->count(),
-                'schema_owner' => $schema->user_id,
-                'request_user' => $user->id,
-                'message' => 'Validación y permisos correctos. Listo para implementar lógica de gráficos.'
-            ], 'Pre-chequeo exitoso.');
+                'chart_config' => $aiData['chart_config'] ?? null, // Info para ApexCharts
+                'sql' => $sqlQuery,                                // SQL para ejecutar
+                'thoughts' => $aiData['thoughts'] ?? null,
+                'usage' => $usageData,
+                'conversation_id' => $conversationId
+            ], 'Configuración de gráfico generada.');
 
         } catch (Exception $e) {
-            return $this->sendError($e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+            Log::error('Chart Error: ' . $e->getMessage());
+            return $this->sendError('Error generando gráfico: ' . $e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 

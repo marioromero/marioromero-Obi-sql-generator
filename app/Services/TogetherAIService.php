@@ -207,4 +207,124 @@ Tu objetivo es traducir lenguaje natural a una consulta SQL precisa, respetando 
 {$schemaString}
 PROMPT;
     }
+
+    /**
+     * Genera SQL + Configuración visual para gráficos.
+     */
+    public function generateChartSql(
+        string $userQuestion,
+        string $dialect,
+        array $schemaTablesObjects,
+        ?string $dbPrefix,
+        User $user,
+        ?string $conversationId
+    ): array {
+        // Usamos un System Prompt especializado para visualización
+        $systemPrompt = $this->buildChartSystemPrompt($dialect, $schemaTablesObjects, $dbPrefix);
+
+        // Construcción de mensajes (mismo patrón que antes)
+        $messages = [];
+        $messages[] = ['role' => 'system', 'content' => $systemPrompt];
+
+        // Historial (opcional: podrías querer limitarlo o no incluirlo para no sesgar el gráfico)
+        // Por ahora lo incluimos para mantener contexto de filtros previos
+        if ($conversationId) {
+            $history = PromptHistory::where('user_id', $user->id)
+                ->where('conversation_id', $conversationId)
+                ->latest()
+                ->take(3)
+                ->get()
+                ->reverse();
+
+            foreach ($history as $record) {
+                if (!empty($record->question) && !empty($record->raw_response)) {
+                    $messages[] = ['role' => 'user', 'content' => $record->question];
+                    $messages[] = ['role' => 'assistant', 'content' => $record->raw_response];
+                }
+            }
+        }
+
+        $messages[] = ['role' => 'user', 'content' => $userQuestion];
+
+        try {
+            $response = $this->client->post('chat/completions', [
+                'model' => $this->model,
+                'messages' => $messages,
+                'temperature' => 0.0,
+                'max_tokens' => 1500,
+                'response_format' => ['type' => 'json_object'],
+            ]);
+
+            $response->throw();
+            $data = $response->json();
+            $aiResponse = $data['choices'][0]['message']['content'] ?? null;
+
+            if (empty($aiResponse)) {
+                throw new Exception('La respuesta de la IA estaba vacía.');
+            }
+
+            return [
+                'chart_response' => $aiResponse, // Ojo: esto traerá SQL + Metadata de gráfico
+                'usage' => $data['usage'] ?? [],
+            ];
+
+        } catch (RequestException $e) {
+            Log::error('TogetherAI Chart Error: ' . $e->getMessage());
+            throw new Exception('Error generando gráfico: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Prompt Especializado para Gráficos (ApexCharts Friendly)
+     */
+    private function buildChartSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
+    {
+        $schemaString = $this->getSchemaContext($schemaTablesObjects);
+
+        $prefixRule = "";
+        if (!empty($dbPrefix)) {
+            $prefixRule = "   - Prefijo de BD OBLIGATORIO: `{$dbPrefix}`. (Ej: `FROM {$dbPrefix}.tabla`).";
+        }
+
+        return <<<PROMPT
+Eres un Experto en Visualización de Datos y SQL ({$dialect}).
+Tu objetivo es generar una consulta SQL para alimentar un gráfico (ApexCharts) basado en la solicitud del usuario.
+
+### TUS REGLAS DE ORO (VISUALIZACIÓN):
+1.  **AGREGACIÓN OBLIGATORIA:** Los gráficos resumen datos. Tu SQL casi SIEMPRE debe tener `GROUP BY`.
+    * Usa `COUNT(*)`, `SUM(columna)`, `AVG(columna)` para el eje Y (Series).
+    * Usa columnas de categoría (Estado, Fecha, Usuario) para el eje X (Categorías).
+2.  **FECHAS EN EJE X:** Si piden evolución temporal ("por mes", "por día"), formatea la fecha en el SQL para que sea legible.
+    * Ejemplo MySQL: `DATE_FORMAT(date_col, '%Y-%m')` para meses.
+3.  **TIPOS DE GRÁFICO:** Sugiere el mejor tipo:
+    * Comparar categorías (ej: estados) -> `"bar"` o `"pie"`.
+    * Evolución tiempo (ej: meses) -> `"line"` o `"area"`.
+4.  **SOLO 2 O 3 COLUMNAS:** El SELECT debe ser simple. Columna Agrupadora (X) y Columna Numérica (Y).
+
+{$prefixRule}
+
+### FORMATO DE RESPUESTA (JSON)
+Debes devolver un JSON con la estructura exacta para que el Frontend sepa cómo pintar el gráfico.
+
+**Ejemplo de Respuesta:**
+{
+  "sql": "SELECT state AS eje_x, COUNT(*) AS eje_y FROM t1 GROUP BY state",
+  "chart_config": {
+    "type": "bar",
+    "title": "Cantidad de Casos por Estado",
+    "xaxis_column": "eje_x",  // Nombre exacto de la columna en el SQL que va al Eje X
+    "series_column": "eje_y", // Nombre exacto de la columna numérica
+    "series_name": "Total Casos" // Etiqueta para la leyenda
+  },
+  "thoughts": "Agrupé por estado para comparar volumen."
+}
+
+### MANEJO DE ERRORES
+Si la pregunta no se puede graficar (ej: "Muestrame el detalle del caso 1"), responde:
+{ "error": "not_chartable", "message": "Esta consulta pide un detalle, no un gráfico. Usa el endpoint de traducción estándar." }
+
+### ESQUEMA DE DATOS
+{$schemaString}
+PROMPT;
+    }
 }

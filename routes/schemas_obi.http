@@ -168,10 +168,18 @@ Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 Content-Type: application/json
 
 {
-  "question": "dame los casos del presente mes que estén en el estado de Ingreso",
-  "schema_table_ids": [
-    16
-  ]
+    "question": "dame los casos del presente mes que estén en el estado de Ingreso",
+    "tables": [
+        {
+            "id": 16,
+            "columns": [
+                "code",
+                "state",
+                "date_of_loss",
+                "accident_number"
+            ]
+        }
+    ]
 }
 
 ###

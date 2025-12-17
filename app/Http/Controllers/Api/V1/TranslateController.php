@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\SQLValidationException;
 use App\Http\Controllers\Controller;
 use App\Models\SchemaTable;
+use App\Models\User;
 use App\Services\TogetherAIService;
 use App\Services\SQLValidationService;
 use App\Traits\ApiResponser;
@@ -27,34 +28,37 @@ class TranslateController extends Controller
 
     public function translate(Request $request)
     {
-        // 1. Validar la petición
+        // 1. Validar la petición (Estructura Unificada "tables")
         $validated = $request->validate([
             'question' => 'required|string|max:1000',
             'conversation_id' => 'nullable|string|max:255',
-            'schema_table_ids' => 'required|array|min:1',
-            'schema_table_ids.*' => 'integer|exists:schema_tables,id',
-            // El schema_config es opcional, pero si viene, define qué columnas ve la IA
-            'schema_config' => 'nullable|array',
-            'schema_config.*.table_id' => 'required_with:schema_config|integer',
-            'schema_config.*.use_full_schema' => 'required_with:schema_config|boolean',
-            'schema_config.*.include_columns' => 'nullable|array',
-            'schema_config.*.include_columns.*' => 'string',
+
+            // Nueva estructura consolidada
+            'tables' => 'required|array|min:1',
+            'tables.*.id' => 'required|integer|exists:schema_tables,id',
+            'tables.*.full_schema' => 'nullable|boolean',
+            'tables.*.columns' => 'nullable|array',
+            'tables.*.columns.*' => 'string',
         ]);
 
         $user = $request->user();
         $userQuestion = $validated['question'];
         $conversationId = $validated['conversation_id'] ?? (string) Str::uuid();
-        $tableIds = $validated['schema_table_ids'];
+
+        // 2. Extraer IDs y Configuración desde 'tables'
+        $tablesInput = collect($validated['tables']);
+        $tableIds = $tablesInput->pluck('id')->all();
+        $configMap = $tablesInput->keyBy('id'); // Mapa para acceso rápido: [16 => {...config...}]
 
         // Variables para log y auditoría
         $sqlQuery = null;
         $aiResponseString = '';
         $usageData = [];
-        $schemaContextLog = null; // Para guardar qué vio exactamente la IA
+        $schemaContextLog = null;
         $dialect = null;
 
         try {
-            // 2. Cargar Tablas
+            // 3. Cargar Tablas desde la BD
             $tablesToLoad = SchemaTable::with('schema')
                 ->whereIn('id', $tableIds)
                 ->get();
@@ -63,57 +67,59 @@ class TranslateController extends Controller
                 throw new Exception('No se encontraron las tablas solicitadas.', Response::HTTP_NOT_FOUND);
             }
 
-            // Validar propiedad del esquema (Security Check)
+            // Validar propiedad del esquema
             $schema = $tablesToLoad->first()->schema;
             if ((int)$user->id !== (int)$schema->user_id) {
-                // Log::warning("Intento de acceso cruzado: User {$user->id} intentó acceder a Schema {$schema->id}");
                 return $this->sendError('Acceso no autorizado al esquema de datos.', Response::HTTP_FORBIDDEN);
             }
 
             $dialect = $schema->dialect;
             $dbPrefix = $schema->database_name_prefix;
 
-            // 3. OPTIMIZACIÓN Y FILTRADO DE COLUMNAS
-            // Procesamos la metadata para enviar a la IA SOLO lo que el front permite
-            $schemaConfig = $request->input('schema_config', []);
-            $configMap = collect($schemaConfig)->keyBy('table_id');
-
+            // 4. OPTIMIZACIÓN, FILTRADO Y ORDENAMIENTO
             $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
-                // Clonamos para no afectar el modelo en memoria si se usara después
                 $tableClone = clone $table;
 
-                // Si no hay config específica para esta tabla, asumimos FULL schema (o podrías asumir vacío según tu lógica de negocio)
+                // Obtener configuración específica de esta tabla
                 $config = $configMap->get($table->id);
 
-                if (!$config) {
-                    // Si no mandan config, ¿mandamos todo? Asumamos que sí por defecto.
+                // A. Si pidieron full_schema explícitamente, retornamos todo sin filtrar
+                if (!empty($config['full_schema']) && $config['full_schema'] === true) {
                     return $tableClone;
                 }
 
-                // Si use_full_schema es true, devolvemos todo intacto
-                if (!empty($config['use_full_schema']) && $config['use_full_schema'] === true) {
-                    return $tableClone;
-                }
-
-                // Filtrar columnas
-                $requestedColumns = $config['include_columns'] ?? [];
+                $requestedColumns = $config['columns'] ?? [];
 
                 if (is_array($tableClone->column_metadata)) {
-                    $tableClone->column_metadata = collect($tableClone->column_metadata)
-                        ->filter(function ($meta) use ($requestedColumns) {
+                    $metaCollection = collect($tableClone->column_metadata);
+
+                    // B. Filtrar Columnas
+                    $filteredCollection = $metaCollection->filter(function ($meta) use ($requestedColumns) {
+                        // Caso 1: Lista blanca explícita (viene del @ en el front)
+                        if (!empty($requestedColumns)) {
                             return in_array($meta['col'], $requestedColumns);
-                        })
-                        ->values()
-                        ->all();
+                        }
+                        // Caso 2: Defaults (usuario no especificó columnas)
+                        return isset($meta['is_default']) && $meta['is_default'] === true;
+                    });
+
+                    // C. ORDENAR: Si hay columnas explícitas, respetar el orden visual del usuario
+                    if (!empty($requestedColumns)) {
+                        $filteredCollection = $filteredCollection->sortBy(function ($meta) use ($requestedColumns) {
+                            return array_search($meta['col'], $requestedColumns);
+                        });
+                    }
+
+                    $tableClone->column_metadata = $filteredCollection->values()->all();
                 }
 
                 return $tableClone;
             });
 
-            // 4. Preparar Contexto y Llamar a la IA
+            // 5. Preparar Contexto y Llamar a la IA
             $schemaTablesObjects = $filteredTables->all();
 
-            // Generamos el contexto aquí para guardarlo en el historial exactamente como se generó
+            // Generamos el contexto aquí para guardarlo en el historial
             $schemaContextLog = $this->togetherAIService->getSchemaContext($schemaTablesObjects);
 
             $serviceResponse = $this->togetherAIService->generateSql(
@@ -128,7 +134,7 @@ class TranslateController extends Controller
             $aiResponseString = $serviceResponse['sql_or_error'];
             $usageData = $serviceResponse['usage'];
 
-            // 5. Gestión de Tokens (Transaccional)
+            // 6. Gestión de Tokens
             DB::transaction(function () use ($user, $usageData) {
                 $user->increment('monthly_requests_count');
                 if (isset($usageData['total_tokens'])) {
@@ -136,10 +142,9 @@ class TranslateController extends Controller
                 }
             });
 
-            // 6. Procesar Respuesta
+            // 7. Procesar Respuesta
             $aiData = json_decode($aiResponseString, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                // Intento de recuperación si la IA mandó texto antes del JSON
                 if (preg_match('/\{.*\}/s', $aiResponseString, $matches)) {
                     $aiData = json_decode($matches[0], true);
                 }
@@ -149,10 +154,9 @@ class TranslateController extends Controller
                 throw new Exception('La respuesta de la IA no es un JSON válido.');
             }
 
-            // A. Flujo de Ambigüedad/Error de IA
+            // Flujo A: Ambigüedad / Missing Context
             if (isset($aiData['error']) && $aiData['error'] === 'missing_context') {
                 $missingContext = $aiData['missing_context'] ?? [];
-
                 $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString, null, $usageData, false, 'IA solicita más contexto', $schemaContextLog, $dialect);
 
                 return $this->sendResponse([
@@ -165,7 +169,7 @@ class TranslateController extends Controller
                 ], 'Se requiere más información para generar la consulta.');
             }
 
-            // B. Flujo Éxito SQL
+            // Flujo B: Éxito SQL
             if (isset($aiData['sql'])) {
                 $sqlQuery = $aiData['sql'];
 
@@ -189,8 +193,7 @@ class TranslateController extends Controller
             return $this->sendError('La consulta generada no pasó los filtros de seguridad.', Response::HTTP_UNPROCESSABLE_ENTITY);
 
         } catch (Exception $e) {
-            Log::error('TranslateController Error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-
+            Log::error('TranslateController Error: ' . $e->getMessage());
             $this->logToHistory($user, $conversationId, $userQuestion, $aiResponseString ?? '', null, $usageData, false, $e->getMessage(), $schemaContextLog, $dialect);
 
             return $this->sendError(
@@ -201,16 +204,13 @@ class TranslateController extends Controller
         }
     }
 
-    /**
-     * Helper para guardar historial.
-     */
-    private function logToHistory(User $user, ?string $conversationId, string $question, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage, ?string $schemaContext, ?string $dialect): void
+    private function logToHistory(\App\Models\User $user, ?string $conversationId, string $question, string $rawResponse, ?string $sqlQuery, array $usageData, bool $wasSuccessful, ?string $errorMessage, ?string $schemaContext, ?string $dialect): void
     {
         try {
             $user->promptHistories()->create([
                 'conversation_id' => $conversationId,
                 'question' => $question,
-                'schema_context' => $schemaContext, // Ahora guardamos el contexto exacto usado
+                'schema_context' => $schemaContext,
                 'dialect' => $dialect,
                 'raw_response' => $rawResponse,
                 'generated_sql' => $sqlQuery,

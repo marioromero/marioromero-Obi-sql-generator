@@ -208,7 +208,7 @@ class TranslateController extends Controller
     /**
      * Nuevo método exclusivo para generar datos de gráficos.
      */
-    public function generateChart(Request $request)
+public function generateChart(Request $request)
     {
         // 1. Validar
         $validated = $request->validate([
@@ -222,7 +222,7 @@ class TranslateController extends Controller
         ]);
 
         $user = $request->user();
-        $conversationId = $validated['conversation_id'] ?? (string)Str::uuid();
+        $conversationId = $validated['conversation_id'] ?? (string) Str::uuid();
 
         // 2. Extraer IDs
         $tablesInput = collect($validated['tables']);
@@ -233,6 +233,8 @@ class TranslateController extends Controller
         $aiResponseString = '';
         $usageData = [];
         $sqlQuery = null;
+        $schemaContextLog = null;
+        $dialect = null;
 
         try {
             // 3. Cargar y Validar Seguridad
@@ -241,11 +243,14 @@ class TranslateController extends Controller
                 throw new Exception('No se encontraron tablas.', Response::HTTP_NOT_FOUND);
             }
             $schema = $tablesToLoad->first()->schema;
+
             if ((int)$user->id !== (int)$schema->user_id) {
                 return $this->sendError('Acceso no autorizado.', Response::HTTP_FORBIDDEN);
             }
 
-            // 4. FILTRADO DE COLUMNAS (Misma lógica que translate)
+            $dialect = $schema->dialect;
+
+            // 4. FILTRADO DE COLUMNAS
             $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
                 $tableClone = clone $table;
                 $config = $configMap->get($table->id);
@@ -258,7 +263,6 @@ class TranslateController extends Controller
 
                 if (is_array($tableClone->column_metadata)) {
                     $metaCollection = collect($tableClone->column_metadata);
-
                     $filteredCollection = $metaCollection->filter(function ($meta) use ($requestedColumns) {
                         if (!empty($requestedColumns)) return in_array($meta['col'], $requestedColumns);
                         return isset($meta['is_default']) && $meta['is_default'] === true;
@@ -269,15 +273,13 @@ class TranslateController extends Controller
                 return $tableClone;
             });
 
-            // 5. Llamar a la IA (Método Chart)
+            // 5. Llamar a la IA (Solo para obtener SQL y Config)
             $schemaTablesObjects = $filteredTables->all();
-
-            // Log del contexto para historial
             $schemaContextLog = $this->togetherAIService->getSchemaContext($schemaTablesObjects);
 
             $serviceResponse = $this->togetherAIService->generateChartSql(
                 $validated['question'],
-                $schema->dialect,
+                $dialect,
                 $schemaTablesObjects,
                 $schema->database_name_prefix,
                 $user,
@@ -295,9 +297,8 @@ class TranslateController extends Controller
                 }
             });
 
-            // 7. Procesar JSON
+            // 7. Procesar Respuesta
             $aiData = json_decode($aiResponseString, true);
-            // Intento de rescate JSON si viene con markdown
             if (json_last_error() !== JSON_ERROR_NONE) {
                 if (preg_match('/\{.*\}/s', $aiResponseString, $matches)) {
                     $aiData = json_decode($matches[0], true);
@@ -308,33 +309,40 @@ class TranslateController extends Controller
                 throw new Exception('La IA no devolvió un JSON válido para gráficos.');
             }
 
-            // 8. Validación de error "not_chartable"
+            // 8. Manejo de errores lógicos de la IA
             if (isset($aiData['error']) && $aiData['error'] === 'not_chartable') {
-                return $this->sendResponse([
+                 $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString, null, $usageData, false, 'not_chartable', $schemaContextLog, $dialect);
+
+                 return $this->sendResponse([
                     'feedback' => [
                         'type' => 'not_chartable',
-                        'message' => $aiData['message'] ?? 'No se puede graficar esta consulta.'
+                        'message' => $aiData['message'] ?? 'Consulta no apta para gráfico.'
                     ]
-                ], 'Consulta no apta para gráfico.');
+                 ], 'Consulta no apta para gráfico.');
             }
 
-            // 9. Guardar Historial
             $sqlQuery = $aiData['sql'] ?? null;
-            $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString, $sqlQuery, $usageData, true, null, $schemaContextLog, $schema->dialect);
+            $chartConfig = $aiData['chart_config'] ?? [];
 
-            // 10. Respuesta Final para el Front
+            // 9. Validar SQL (Siempre validamos seguridad, aunque no ejecutemos)
+            $this->sqlValidationService->validate($sqlQuery);
+
+            // 10. Guardar Historial y Responder
+            $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString, $sqlQuery, $usageData, true, null, $schemaContextLog, $dialect);
+
+            // RESPUESTA LIMPIA: Solo SQL y Configuración Visual
             return $this->sendResponse([
-                'chart_config' => $aiData['chart_config'] ?? null,
                 'sql' => $sqlQuery,
+                'chart_config' => $chartConfig, // Contiene: type, xaxis_column, series_column, title
                 'thoughts' => $aiData['thoughts'] ?? null,
                 'usage' => $usageData,
                 'conversation_id' => $conversationId
-            ], 'Configuración de gráfico generada.');
+            ], 'Definición de gráfico generada.');
 
         } catch (Exception $e) {
             Log::error('Chart Error: ' . $e->getMessage());
             $this->logToHistory($user, $conversationId, $validated['question'], $aiResponseString ?? '', null, $usageData, false, $e->getMessage(), $schemaContextLog ?? null, $schema->dialect ?? null);
-            return $this->sendError('Error generando gráfico: ' . $e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+            return $this->sendError('Error generando definición de gráfico: ' . $e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 

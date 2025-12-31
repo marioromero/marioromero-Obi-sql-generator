@@ -93,6 +93,8 @@ class TogetherAIService
 
         foreach ($schemaTablesObjects as $table) {
             $tableName = $table->table_name;
+
+            // 1. Recuperamos la cabecera informativa
             $tableString = "TABLA/VISTA: `{$tableName}`\n";
             $tableString .= "DESCRIPCIÓN: Vista lógica de datos.\n";
             $tableString .= "COLUMNAS VISIBLES (Solo estas están permitidas):\n";
@@ -106,43 +108,49 @@ class TogetherAIService
                     $colName = $meta['col'];
                     $sqlType = $meta['sql_def'];
 
-                    // Extraer Concepto Principal para usarlo como Alias
+                    // 2. Recuperamos la lógica de Sinónimos y Concepto Principal
                     $synonyms = [];
                     $primaryConcept = $colName;
 
                     if (!empty($meta['desc'])) {
+                        // Separar por comas para extraer sinónimos
                         $descParts = array_map('trim', explode(',', $meta['desc']));
-                        $primaryConcept = $descParts[0];
+                        $primaryConcept = $descParts[0]; // El primero es el concepto canónico
                         if (count($descParts) > 1) {
-                            $synonyms = array_slice($descParts, 1);
+                            $synonyms = array_slice($descParts, 1); // El resto son alias de búsqueda
                         }
                     }
 
                     $origin = $meta['origin'] ?? 'Sistema';
                     $instruction = $meta['instructions'] ?? '';
 
+                    // 3. Construcción de la línea rica en contexto
                     $line = "  - `{$colName}` ({$sqlType})";
-                    $line .= " | Concepto: \"{$primaryConcept}\""; // <-- ESTE ES CLAVE PARA EL ALIAS
+                    $line .= " | Concepto: \"{$primaryConcept}\"";
 
+                    // Insertamos de nuevo los sinónimos
                     if (!empty($synonyms)) {
                         $line .= " | Sinónimos: \"" . implode('", "', $synonyms) . "\"";
                     }
 
-                    $line .= " | Entidad: \"{$origin}\"";
+                    $line .= " | Origen: \"{$origin}\"";
 
+                    // 4. EL ÉNFASIS CRÍTICO (La parte nueva que asegura la lectura de la instrucción)
+                    // Usamos mayúsculas y asteriscos para romper el patrón visual y forzar atención
                     if (!empty($instruction)) {
-                        $line .= " | [LOGIC_REQUIRED]: \"{$instruction}\"";
+                        $line .= " | *** [TRANSFORMACIÓN_OBLIGATORIA]: \"{$instruction}\" ***";
                     }
 
                     $columnsDefinitions[] = $line;
                 }
             }
 
+            // 5. Recuperamos el pie de página de gobernanza
             if (empty($columnsDefinitions)) {
                 $tableString .= "  (ADVERTENCIA CRÍTICA: No hay columnas visibles. El usuario debe seleccionarlas explícitamente.)\n";
             } else {
                 $tableString .= implode("\n", $columnsDefinitions) . "\n";
-                $tableString .= "  -- NOTA: El esquema real tiene más columnas (OCULTAS). Solo puedes usar las listadas arriba. PROHIBIDO SELECT *.\n";
+                $tableString .= "  -- GOBERNANZA: El esquema real tiene más columnas (OCULTAS). Solo puedes usar las listadas arriba. PROHIBIDO SELECT *.\n";
             }
 
             $schemaStringParts[] = $tableString;
@@ -153,6 +161,7 @@ class TogetherAIService
 
     private function buildSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
     {
+        // Obtenemos el esquema con la nueva etiqueta visual fuerte
         $schemaString = $this->getSchemaContext($schemaTablesObjects);
 
         $prefixRule = "";
@@ -164,43 +173,53 @@ class TogetherAIService
 Eres un Arquitecto de Datos y Experto en SQL ({$dialect}).
 Tu objetivo es traducir lenguaje natural a una consulta SQL precisa, respetando reglas de negocio estrictas.
 
-### TUS INSTRUCCIONES PRIORITARIAS
+### REGLA DE ORO: TRANSFORMACIONES E INSTRUCCIONES (PRIORIDAD MÁXIMA)
+Antes de escribir el SQL, verifica si alguna columna tiene la etiqueta `[TRANSFORMACIÓN_OBLIGATORIA]`.
+1.  **Prioridad Absoluta:** Si existe una instrucción, esta anula la interpretación estándar del dato. Debes aplicar la lógica solicitada obligatoriamente en el `SELECT` y en el `WHERE`.
+2.  **Manejo de Backslashes (Rutas/FQCN):**
+    * Si la instrucción pide "extraer valor tras el último backslash" (ej: `App\Entity\Estado` -> `Estado`), ten cuidado con el carácter de escape.
+    * Para MySQL/MariaDB, usa: `SUBSTRING_INDEX(columna, '\\\\', -1)`. (Nota: Se requieren cuatro backslashes en el string JSON para representar uno literal en la query).
+    * Nunca devuelvas la ruta completa si se pide solo el nombre final.
 
-1.  **INTERPRETACIÓN DE METADATOS:**
-    Analiza la sección "COLUMNAS VISIBLES".
-    a) **Concepto Principal (Aliases):** DEBES usar el valor de "Concepto" para generar un alias amigable en el SELECT.
-       * *Ejemplo:* Si la columna es `code` y el concepto es "Código Caso", el SQL debe ser: `SELECT t1.code AS "Código Caso"`.
-    b) **[LOGIC_REQUIRED] y FILTRADO:** Las instrucciones lógicas son OBLIGATORIAS para SELECT y WHERE.
-       * *Ejemplo:* Si `state` requiere extraer la última palabra y piden "Ingreso", GENERA: `WHERE SUBSTRING_INDEX(state, '/', -1) = 'Ingreso'`.
-    c) **Inferencia:** Si piden filtrar por un valor (ej: "Estado Ingreso") y no es ENUM, asume que es texto y usa LIKE sobre la columna conceptualmente coincidente.
+### INSTRUCCIONES DE METADATOS Y ALIAS
+1.  **Concepto Principal (Aliases):**
+    * Analiza la sección "COLUMNAS VISIBLES".
+    * **DEBES** usar el valor de "Concepto" para generar un alias amigable en el SELECT.
+    * *Ejemplo:* Si la columna es `code` y el concepto es "Código Caso", el SQL debe ser: `SELECT t1.code AS "Código Caso"`.
 
-2.  **SINTAXIS SQL:**
-    * Dialecto: **{$dialect}**.
+2.  **Inferencia de Tipos:**
+    * Si piden filtrar por un valor (ej: "Estado Ingreso") y la columna no es ENUM, asume que es texto.
+    * Usa `LIKE` o igualdad directa aplicando la transformación de la Regla de Oro si corresponde.
+
+### SINTAXIS SQL
+1.  **Dialecto:** **{$dialect}**.
+2.  **Estructura:**
     * Usa alias de tabla explícitos (ej: `t1.columna`).
-    * **Fechas:** Usa funciones dinámicas (`CURRENT_DATE`, `NOW()`) para conceptos como "este mes".
-{$prefixRule}
+    * **Fechas:** Usa funciones dinámicas (`CURRENT_DATE`, `NOW()`) para conceptos relativos como "este mes" o "hoy".
+    {$prefixRule}
 
-3.  **FORMATO DE SALIDA (ESTRICTO):**
-    * **ORDEN:** Lista las columnas en el `SELECT` EXACTAMENTE en el orden visual de "COLUMNAS VISIBLES".
-    * **ALIASES (Obligatorio):** TODAS las columnas del SELECT deben tener `AS "Nombre"`. No devuelvas nombres de columna crudos.
-    * **PROHIBIDO `SELECT *`**.
+### FORMATO DE SALIDA (ESTRICTO)
+1.  **ORDEN:** Lista las columnas en el `SELECT` EXACTAMENTE en el orden visual de "COLUMNAS VISIBLES".
+2.  **ALIASES (Obligatorio):** TODAS las columnas del SELECT deben tener `AS "Nombre"`. No devuelvas nombres de columna crudos.
+3.  **PROHIBIDO `SELECT *`**.
 
-4.  **SEGURIDAD:**
-    * Solo usa columnas visibles. Si falta información, responde `missing_context`.
+### SEGURIDAD
+* Solo usa columnas listadas en "COLUMNAS VISIBLES".
+* Si la pregunta requiere datos que no están en el esquema, responde con el error `missing_context`.
 
 ### FORMATO DE RESPUESTA (JSON)
 
 **Caso Éxito:**
 {
-  "sql": "SELECT t1.columna1 AS 'Alias1', t1.columna2 AS 'Alias2' ...",
-  "thoughts": "Explica la lógica usada."
+  "sql": "SELECT SUBSTRING_INDEX(t1.state, '\\\\', -1) AS 'Estado', t1.code AS 'Código' FROM ...",
+  "thoughts": "Detecté instrucción de limpieza en 'state'. Apliqué SUBSTRING_INDEX y asigné alias."
 }
 
 **Caso Error/Ambigüedad:**
 {
   "error": "missing_context",
-  "missing_context": ["Explica qué falta."],
-  "thoughts": "..."
+  "missing_context": ["Explica qué falta en el esquema para responder."],
+  "thoughts": "El usuario pide 'fecha de nacimiento' pero esa columna no está visible."
 }
 
 ### ESQUEMA DE DATOS DEFINIDO (VISTA PARCIAL)
@@ -275,9 +294,12 @@ PROMPT;
     /**
      * Prompt Especializado para Gráficos (ApexCharts Friendly)
      */
+    /**
+     * Prompt Especializado para Gráficos (ApexCharts Friendly)
+     */
     private function buildChartSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
     {
-        // Reutilizamos el contexto rico (con instrucciones lógicas y alias)
+        // Reutilizamos el contexto rico (que ahora trae la etiqueta [TRANSFORMACIÓN_OBLIGATORIA])
         $schemaString = $this->getSchemaContext($schemaTablesObjects);
 
         $prefixRule = "";
@@ -289,33 +311,40 @@ PROMPT;
 Eres un Experto en Visualización de Datos y SQL ({$dialect}).
 Tu objetivo es generar una consulta SQL para alimentar un gráfico (ApexCharts) basado en la solicitud del usuario.
 
+### REGLA DE ORO: TRANSFORMACIONES EN AGREGACIONES (PRIORIDAD MÁXIMA)
+Antes de generar el SQL, verifica si la columna a graficar tiene la etiqueta `[TRANSFORMACIÓN_OBLIGATORIA]`.
+
+1.  **LIMPIEZA EN EL GROUP BY (CRÍTICO):**
+    * Para que el gráfico sea legible, **DEBES aplicar la transformación tanto en el `SELECT` como en el `GROUP BY`**.
+    * Si la instrucción pide "extraer después del último backslash" (FQCN), usa: `SUBSTRING_INDEX(columna, '\\\\', -1)`.
+    * *Ejemplo Incorrecto:* `SELECT ... GROUP BY state` (Esto crea etiquetas sucias como 'App\Entity\Closed').
+    * *Ejemplo Correcto:* `SELECT ... GROUP BY SUBSTRING_INDEX(state, '\\\\', -1)` (Esto crea etiquetas limpias como 'Closed').
+
+2.  **ALIASES:**
+    * Usa el "Concepto" listado en el esquema para nombrar las series si es posible, pero mantén claves simples (`eje_x`, `eje_y`) para la configuración técnica.
+
 ### TUS REGLAS DE ORO (VISUALIZACIÓN):
 
-1.  **AGREGACIÓN OBLIGATORIA (GROUP BY):**
+1.  **AGREGACIÓN OBLIGATORIA:**
     * Los gráficos resumen datos. Tu SQL **SIEMPRE** debe tener `GROUP BY` (a menos que pidan un KPI único).
     * Usa `COUNT(*)`, `SUM(columna)`, `AVG(columna)` para el eje Y (Series).
     * Usa columnas de categoría (Estado, Fecha, Usuario) para el eje X (Categorías).
 
-2.  **INTERPRETACIÓN DE METADATOS:**
-    * Respeta las etiquetas `[LOGIC_REQUIRED]` del esquema.
-    * Si una columna requiere extracción (ej: "última palabra después del slash"), aplica esa lógica EN EL `GROUP BY` y en el `SELECT`.
-
-3.  **FECHAS EN EJE X:**
+2.  **FECHAS EN EJE X:**
     * Si piden evolución temporal ("por mes", "por día"), formatea la fecha en el SQL para que sea legible y agrupe correctamente.
     * Ejemplo MySQL: `DATE_FORMAT(date_col, '%Y-%m')` para meses.
 
-4.  **TIPOS DE GRÁFICO:** Sugiere el mejor tipo en `chart_config`:
+3.  **TIPOS DE GRÁFICO:** Sugiere el mejor tipo en `chart_config`:
     * Comparar categorías (ej: estados) -> `"bar"` o `"pie"`.
     * Evolución tiempo (ej: meses) -> `"line"` o `"area"`.
-
-{$prefixRule}
+    {$prefixRule}
 
 ### FORMATO DE RESPUESTA (JSON)
 Debes devolver un JSON con la estructura exacta para que el Frontend (ApexCharts) sepa cómo pintar el gráfico.
 
 **Ejemplo de Respuesta:**
 {
-  "sql": "SELECT state AS eje_x, COUNT(*) AS eje_y FROM t1 GROUP BY state",
+  "sql": "SELECT SUBSTRING_INDEX(state, '\\\\', -1) AS eje_x, COUNT(*) AS eje_y FROM t1 GROUP BY SUBSTRING_INDEX(state, '\\\\', -1)",
   "chart_config": {
     "type": "bar",
     "title": "Cantidad de Casos por Estado",
@@ -323,7 +352,7 @@ Debes devolver un JSON con la estructura exacta para que el Frontend (ApexCharts
     "series_column": "eje_y", // Nombre exacto de la columna numérica
     "series_name": "Total Casos" // Etiqueta para la leyenda
   },
-  "thoughts": "Agrupé por estado para comparar volumen."
+  "thoughts": "Detecté instrucción de limpieza en 'state'. Apliqué SUBSTRING_INDEX en el GROUP BY para tener categorías limpias."
 }
 
 ### MANEJO DE ERRORES

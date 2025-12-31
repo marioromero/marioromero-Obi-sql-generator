@@ -168,27 +168,26 @@ Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 Content-Type: application/json
 
 {
-    "question": "dame los casos del presente mes que estén en el estado de Ingreso",
+    "question": "dame los casos que tengan sólo 1 documento firmado, (contrato firmado o mandato firmado pero no ambos)",
     "tables": [
         {
             "id": 16,
             "columns": [
                 "code",
                 "state",
-                "date_of_loss",
-                "accident_number"
+                "created_at"
             ]
         }
     ]
 }
-
+####
 ### CHARTS
 POST https://www.obi.reports.nodox.cl/api/generate-chart
 Authorization: Bearer 7|f4ESnkFoCYjt51sSf7cO1aAeWFEIaRAxra2XuQU09077f4f6
 Content-Type: application/json
 
 {
-    "question": "Muestrame un gráfico con la cantidad de casos por estado",
+    "question": "Muestrame un gráfico con la cantidad de casos por mes del presente año",
     "tables": [
         {
             "id": 16,

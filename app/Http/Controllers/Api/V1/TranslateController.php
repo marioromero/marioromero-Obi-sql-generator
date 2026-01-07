@@ -219,6 +219,16 @@ public function generateChart(Request $request)
             'tables.*.full_schema' => 'nullable|boolean',
             'tables.*.columns' => 'nullable|array',
             'tables.*.columns.*' => 'string',
+            // Nuevos parámetros para especificaciones de ejes
+            'chart_config' => 'nullable|array',
+            'chart_config.x_axis' => 'nullable|array',
+            'chart_config.x_axis.label' => 'nullable|string|max:255',
+            'chart_config.x_axis.format' => 'nullable|string|max:100',
+            'chart_config.y_axis' => 'nullable|array',
+            'chart_config.y_axis.label' => 'nullable|string|max:255',
+            'chart_config.y_axis.format' => 'nullable|string|max:100',
+            'chart_config.title' => 'nullable|string|max:255',
+            'chart_config.type' => 'nullable|string|in:bar,line,area,pie,donut,scatter',
         ]);
 
         $user = $request->user();
@@ -283,7 +293,8 @@ public function generateChart(Request $request)
                 $schemaTablesObjects,
                 $schema->database_name_prefix,
                 $user,
-                $conversationId
+                $conversationId,
+                $validated['chart_config'] ?? null
             );
 
             $aiResponseString = $serviceResponse['chart_response'];

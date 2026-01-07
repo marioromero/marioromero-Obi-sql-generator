@@ -234,11 +234,12 @@ PROMPT;
         array   $schemaTablesObjects,
         ?string $dbPrefix,
         User    $user,
-        ?string $conversationId
+        ?string $conversationId,
+        ?array  $chartConfig = null
     ): array
     {
         // Usamos un System Prompt especializado para visualización
-        $systemPrompt = $this->buildChartSystemPrompt($dialect, $schemaTablesObjects, $dbPrefix);
+        $systemPrompt = $this->buildChartSystemPrompt($dialect, $schemaTablesObjects, $dbPrefix, $chartConfig);
 
         // Construcción de mensajes
         $messages = [];
@@ -297,7 +298,7 @@ PROMPT;
     /**
      * Prompt Especializado para Gráficos (ApexCharts Friendly)
      */
-    private function buildChartSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix): string
+    private function buildChartSystemPrompt(string $dialect, array $schemaTablesObjects, ?string $dbPrefix, ?array $chartConfig = null): string
     {
         // Reutilizamos el contexto rico (que ahora trae la etiqueta [TRANSFORMACIÓN_OBLIGATORIA])
         $schemaString = $this->getSchemaContext($schemaTablesObjects);
@@ -305,6 +306,45 @@ PROMPT;
         $prefixRule = "";
         if (!empty($dbPrefix)) {
             $prefixRule = "   - Prefijo de BD OBLIGATORIO: `{$dbPrefix}`. (Ej: `FROM {$dbPrefix}.tabla`).";
+        }
+
+        // Procesar configuración de ejes si está disponible
+        $axisConfigInstructions = "";
+        if ($chartConfig) {
+            $axisConfigInstructions .= "\n### CONFIGURACIÓN ESPECÍFICA DE EJES (PROPORCIONADA POR EL USUARIO)\n";
+
+            if (!empty($chartConfig['x_axis'])) {
+                $xAxis = $chartConfig['x_axis'];
+                $axisConfigInstructions .= "**EJE X:**\n";
+                if (!empty($xAxis['label'])) {
+                    $axisConfigInstructions .= "  - Etiqueta: \"{$xAxis['label']}\"\n";
+                }
+                if (!empty($xAxis['format'])) {
+                    $axisConfigInstructions .= "  - Formato: \"{$xAxis['format']}\"\n";
+                    $axisConfigInstructions .= "  - **OBLIGATORIO:** Aplica este formato en el SQL para que las etiquetas del eje X sean legibles.\n";
+                }
+                $axisConfigInstructions .= "\n";
+            }
+
+            if (!empty($chartConfig['y_axis'])) {
+                $yAxis = $chartConfig['y_axis'];
+                $axisConfigInstructions .= "**EJE Y:**\n";
+                if (!empty($yAxis['label'])) {
+                    $axisConfigInstructions .= "  - Etiqueta: \"{$yAxis['label']}\"\n";
+                }
+                if (!empty($yAxis['format'])) {
+                    $axisConfigInstructions .= "  - Formato: \"{$yAxis['format']}\"\n";
+                }
+                $axisConfigInstructions .= "\n";
+            }
+
+            if (!empty($chartConfig['title'])) {
+                $axisConfigInstructions .= "**TÍTULO DEL GRÁFICO:** \"{$chartConfig['title']}\"\n\n";
+            }
+
+            if (!empty($chartConfig['type'])) {
+                $axisConfigInstructions .= "**TIPO DE GRÁFICO FORZADO:** \"{$chartConfig['type']}\"\n\n";
+            }
         }
 
         return <<<PROMPT
@@ -322,6 +362,15 @@ Antes de generar el SQL, verifica si la columna a graficar tiene la etiqueta `[T
 
 2.  **ALIASES:**
     * Usa el "Concepto" listado en el esquema para nombrar las series si es posible, pero mantén claves simples (`eje_x`, `eje_y`) para la configuración técnica.
+
+3.  **FORMATO DE ETIQUETAS (CRÍTICO PARA LEGIBILIDAD):**
+    * **FECHAS:** Si especifican un formato de fecha, **OBLIGATORIO** aplicarlo tanto en SELECT como en GROUP BY.
+    * **EJEMPLOS DE FORMATOS:**
+        - "meses_del_año" → `DATE_FORMAT(date_col, '%M')` → "January", "February", etc.
+        - "meses_abreviados" → `DATE_FORMAT(date_col, '%b')` → "Jan", "Feb", etc.
+        - "nombres_meses" → Usa CASE o MONTH() + array de nombres.
+        - "trimestres" → `CONCAT('Q', QUARTER(date_col), ' ', YEAR(date_col))` → "Q1 2025".
+    * **NUNCA** devuelvas códigos crudos como "2025-01", "2025-02" si el usuario pidió nombres de meses.
 
 ### TUS REGLAS DE ORO (VISUALIZACIÓN):
 
@@ -360,7 +409,7 @@ Si la pregunta no se puede graficar (ej: "Muestrame el detalle del caso 1" o "Li
 { "error": "not_chartable", "message": "Esta consulta pide un detalle, no un gráfico." }
 
 ### ESQUEMA DE DATOS
-{$schemaString}
+{$schemaString}{$axisConfigInstructions}
 PROMPT;
     }
 }

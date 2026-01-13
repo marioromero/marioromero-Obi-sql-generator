@@ -260,7 +260,7 @@ public function generateChart(Request $request)
 
             $dialect = $schema->dialect;
 
-            // 4. FILTRADO DE COLUMNAS
+            // 4. FILTRADO DE COLUMNAS PARA GRÁFICOS (AUTO-SELECCIÓN + EXPLICITAS)
             $filteredTables = $tablesToLoad->map(function ($table) use ($configMap) {
                 $tableClone = clone $table;
                 $config = $configMap->get($table->id);
@@ -269,13 +269,73 @@ public function generateChart(Request $request)
                     return $tableClone;
                 }
 
-                $requestedColumns = $config['columns'] ?? [];
+                // Columnas explícitas del usuario (puede venir vacío o no existir)
+                $explicitColumns = $config['columns'] ?? [];
+
+                // Si no se envían columnas explícitas, enviar todas las columnas
+                if (empty($explicitColumns)) {
+                    return $tableClone;
+                }
+
+                // Auto-seleccionar columnas cuantitativas para gráficos
+                // Criterios: tipo fecha, int, o bigint (no terminados en "_id")
+                $autoSelectedColumns = [];
 
                 if (is_array($tableClone->column_metadata)) {
                     $metaCollection = collect($tableClone->column_metadata);
-                    $filteredCollection = $metaCollection->filter(function ($meta) use ($requestedColumns) {
-                        if (!empty($requestedColumns)) return in_array($meta['col'], $requestedColumns);
-                        return isset($meta['is_default']) && $meta['is_default'] === true;
+
+                    foreach ($metaCollection as $meta) {
+                        $colName = $meta['col'] ?? null;
+                        $sqlType = strtolower($meta['sql_def'] ?? '');
+
+                        if (!$colName) continue;
+
+                        // Verificar si es una columna cuantitativa válida
+                        $isQuantitative = false;
+
+                        // Tipo fecha
+                        if (str_contains($sqlType, 'date') || str_contains($sqlType, 'timestamp') || str_contains($sqlType, 'datetime')) {
+                            $isQuantitative = true;
+                        }
+                        // Tipo int
+                        elseif (str_contains($sqlType, 'int') && !str_ends_with($colName, '_id')) {
+                            $isQuantitative = true;
+                        }
+                        // Tipo bigint (pero no FK, que terminan en _id)
+                        elseif (str_contains($sqlType, 'bigint') && !str_ends_with($colName, '_id')) {
+                            $isQuantitative = true;
+                        }
+
+                        if ($isQuantitative) {
+                            $autoSelectedColumns[] = $colName;
+                        }
+                    }
+                }
+
+                // Unir columnas auto-seleccionadas con las explícitas del usuario
+                // Las explícitas del usuario tienen prioridad (se agregan al final)
+                $finalColumns = array_unique(array_merge($autoSelectedColumns, $explicitColumns));
+
+                if (is_array($tableClone->column_metadata)) {
+                    $metaCollection = collect($tableClone->column_metadata);
+
+                    // Filtrar solo las columnas que están en la lista final
+                    $filteredCollection = $metaCollection->filter(function ($meta) use ($finalColumns) {
+                        return in_array($meta['col'], $finalColumns);
+                    });
+
+                    // Orden: primero auto-seleccionadas, luego explícitas
+                    $filteredCollection = $filteredCollection->sortBy(function ($meta) use ($autoSelectedColumns, $explicitColumns) {
+                        $col = $meta['col'];
+                        $autoIndex = array_search($col, $autoSelectedColumns);
+                        $explicitIndex = array_search($col, $explicitColumns);
+
+                        if ($autoIndex !== false && $explicitIndex === false) {
+                            return $autoIndex; // Mantener orden original de auto-seleccionadas
+                        } elseif ($explicitIndex !== false) {
+                            return 1000 + $explicitIndex; // Poner explícitas al final
+                        }
+                        return 9999;
                     });
 
                     $tableClone->column_metadata = $filteredCollection->values()->all();
